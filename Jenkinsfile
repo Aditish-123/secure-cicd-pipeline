@@ -36,10 +36,10 @@ pipeline {
     }
 
     post {
-        always {
-            echo 'Archiving Trivy security report...'
-            bat 'dir trivy-report.json'
-            archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: false
-        }
+    always {
+        echo 'Archiving Trivy security reports...'
+        bat 'dir trivy-report.json trivy-summary.txt'
+        archiveArtifacts artifacts: 'trivy-report.json,trivy-summary.txt', allowEmptyArchive: false
     }
+}
 }
