@@ -26,11 +26,20 @@ pipeline {
                 bat 'docker build -t secure-cicd-app:latest .'
             }
         }
+
         stage('Security Gate') {
             steps {
                 bat 'powershell -ExecutionPolicy Bypass -File .\\security-gate.ps1'
-    }
-}
+            }
+        }
 
+    }
+
+    post {
+        always {
+            echo 'Archiving Trivy security report...'
+            bat 'dir trivy-report.json'
+            archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: false
+        }
     }
 }
