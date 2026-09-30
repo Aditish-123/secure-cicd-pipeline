@@ -11,13 +11,13 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                bat 'python3 -m pip install -r requirements.txt'
+                bat 'python -m pip install -r requirements.txt'
             }
         }
 
         stage('Test') {
             steps {
-                bat 'python3 -m pytest'
+                bat 'python -m pytest'
             }
         }
 
