@@ -26,6 +26,11 @@ pipeline {
                 bat 'docker build -t secure-cicd-app:latest .'
             }
         }
+        stage('Security Gate') {
+            steps {
+                bat 'powershell -ExecutionPolicy Bypass -File .\\security-gate.ps1'
+    }
+}
 
     }
 }
