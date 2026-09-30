@@ -3,17 +3,21 @@ pipeline {
 
     stages {
 
-        stage('Build') {
+        stage('Checkout') {
             steps {
-                echo 'Building application...'
-                echo 'Build completed successfully.'
+                echo 'Source code checked out from GitHub.'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'python3 -m pip install -r requirements.txt'
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Running tests...'
-                echo 'All tests passed.'
+                sh 'python3 -m pytest'
             }
         }
 
