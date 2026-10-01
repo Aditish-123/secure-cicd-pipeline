@@ -93,6 +93,8 @@ foreach ($result in $data.Results) {
 
                 $issueCount++
 
+                # Show detailed issue in Jenkins Console
+
                 Write-Host ""
                 Write-Host "------------------------------------------"
                 Write-Host "Issue #$issueCount"
@@ -102,6 +104,8 @@ foreach ($result in $data.Results) {
                 Write-Host "Installed: $($vulnerability.InstalledVersion)"
                 Write-Host "Fixed    : $($vulnerability.FixedVersion)"
                 Write-Host "------------------------------------------"
+
+                # Also save the same information to report
 
                 "Issue #$issueCount" | Out-File $summary -Append
                 "Severity : $($vulnerability.Severity)" | Out-File $summary -Append
@@ -114,6 +118,9 @@ foreach ($result in $data.Results) {
         }
     }
 }
+
+Write-Host ""
+Write-Host "Developer-friendly security report created: $summary"
 
 # ==========================================
 # SECURITY DECISION
@@ -178,3 +185,5 @@ Write-Host "The Docker image passed the configured security policy."
 Write-Host "=========================================="
 Write-Host "      SECURITY SCAN COMPLETED"
 Write-Host "=========================================="
+
+exit 0
