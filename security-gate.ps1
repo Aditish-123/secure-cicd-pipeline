@@ -80,11 +80,3 @@ if ($high -gt 0) {
 
 Write-Host "SECURITY GATE: PASSED"
 exit 0
-}
-
-if ($high -gt 0) {
-    Write-Host "SECURITY GATE: WARNING - High vulnerabilities found, but within allowed threshold."
-}
-
-Write-Host "SECURITY GATE: PASSED"
-exit 0
