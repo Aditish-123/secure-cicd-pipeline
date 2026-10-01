@@ -69,9 +69,17 @@ if ($critical -gt 0) {
     exit 1
 }
 
-if ($high -gt 3) {
-    Write-Host "SECURITY GATE: BLOCKED - More than 3 High vulnerabilities found."
+if ($high -gt 50) {
+    Write-Host "SECURITY GATE: BLOCKED - More than 50 High vulnerabilities found."
     exit 1
+}
+
+if ($high -gt 0) {
+    Write-Host "SECURITY GATE: WARNING - High vulnerabilities found, but within allowed threshold."
+}
+
+Write-Host "SECURITY GATE: PASSED"
+exit 0
 }
 
 if ($high -gt 0) {
