@@ -6,24 +6,79 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Source code checked out from GitHub.'
+
+                script {
+
+                    if (fileExists('requirements.txt')) {
+                        env.DETECTED_LANGUAGE = 'python'
+                        echo 'Detected language: Python'
+                    }
+                    else if (fileExists('node-demo/package.json')) {
+                        env.DETECTED_LANGUAGE = 'node'
+                        echo 'Detected language: Node.js'
+                    }
+                    else {
+                        error 'Unable to detect supported project language.'
+                    }
+
+                }
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pip install -r requirements.txt'
+                script {
+
+                    if (env.DETECTED_LANGUAGE == 'python') {
+
+                        bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pip install -r requirements.txt'
+
+                    }
+                    else if (env.DETECTED_LANGUAGE == 'node') {
+
+                        bat 'cd node-demo && npm install'
+
+                    }
+
+                }
             }
         }
 
         stage('Test') {
             steps {
-                bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pytest'
+                script {
+
+                    if (env.DETECTED_LANGUAGE == 'python') {
+
+                        bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pytest'
+
+                    }
+                    else if (env.DETECTED_LANGUAGE == 'node') {
+
+                        bat 'cd node-demo && npm test'
+
+                    }
+
+                }
             }
         }
 
         stage('Docker Build') {
             steps {
-                bat 'docker build -t secure-cicd-app:latest .'
+                script {
+
+                    if (env.DETECTED_LANGUAGE == 'python') {
+
+                        bat 'docker build -t secure-cicd-app:latest .'
+
+                    }
+                    else if (env.DETECTED_LANGUAGE == 'node') {
+
+                        bat 'docker build -t secure-cicd-node-app:latest node-demo'
+
+                    }
+
+                }
             }
         }
 
@@ -35,7 +90,8 @@ pipeline {
 
                     if (previousBuild != null) {
                         env.PREVIOUS_BUILD_NUMBER = previousBuild.number.toString()
-                    } else {
+                    }
+                    else {
                         env.PREVIOUS_BUILD_NUMBER = "NONE"
                     }
 
@@ -54,9 +110,24 @@ pipeline {
 
                     bat 'docker login -u %DOCKER_USERNAME% -p %DOCKER_PASSWORD%'
 
-                    bat 'docker tag secure-cicd-app:latest %DOCKER_USERNAME%/secure-cicd-app:latest'
+                    script {
 
-                    bat 'docker push %DOCKER_USERNAME%/secure-cicd-app:latest'
+                        if (env.DETECTED_LANGUAGE == 'python') {
+
+                            bat 'docker tag secure-cicd-app:latest %DOCKER_USERNAME%/secure-cicd-app:latest'
+
+                            bat 'docker push %DOCKER_USERNAME%/secure-cicd-app:latest'
+
+                        }
+                        else if (env.DETECTED_LANGUAGE == 'node') {
+
+                            bat 'docker tag secure-cicd-node-app:latest %DOCKER_USERNAME%/secure-cicd-node-app:latest'
+
+                            bat 'docker push %DOCKER_USERNAME%/secure-cicd-node-app:latest'
+
+                        }
+
+                    }
                 }
             }
         }
