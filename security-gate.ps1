@@ -29,10 +29,13 @@ $medium = 0
 $low = 0
 
 foreach ($result in $data.Results) {
+
     if ($null -ne $result.Vulnerabilities) {
+
         foreach ($vulnerability in $result.Vulnerabilities) {
 
             switch ($vulnerability.Severity) {
+
                 "CRITICAL" { $critical++ }
                 "HIGH"     { $high++ }
                 "MEDIUM"   { $medium++ }
@@ -200,14 +203,23 @@ if ($critical -gt 0) {
 
     Write-Host ""
     Write-Host "SECURITY GATE: BLOCKED - Critical vulnerability found."
+    Write-Host "CRITICAL vulnerabilities found: $critical"
+    exit 1
+}
+
+if ($high -gt 50) {
+
+    Write-Host ""
+    Write-Host "SECURITY GATE: BLOCKED - High vulnerabilities exceed threshold of 50."
+    Write-Host "HIGH vulnerabilities found: $high"
     exit 1
 }
 
 if ($high -gt 0) {
 
     Write-Host ""
-    Write-Host "SECURITY GATE: WARNING - High vulnerabilities found."
-    Write-Host "Pipeline will continue so the detailed vulnerability report can be reviewed."
+    Write-Host "SECURITY GATE: WARNING - High vulnerabilities found: $high"
+    Write-Host "High vulnerability count is within the allowed threshold of 50."
 }
 
 Write-Host ""
