@@ -1,0 +1,10 @@
+{
+  "name": "node-cicd-demo",
+  "version": "1.0.0",
+  "description": "Node.js application for reusable CI/CD pipeline testing",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "node test.js"
+  }
+}
