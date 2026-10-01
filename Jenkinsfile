@@ -9,18 +9,23 @@ pipeline {
 
                 script {
 
-                    if (fileExists('requirements.txt')) {
+                    if (fileExists('python-demo/requirements.txt')) {
                         env.DETECTED_LANGUAGE = 'python'
+                        env.APP_DIR = 'python-demo'
+                        env.IMAGE_NAME = 'secure-cicd-app:latest'
+
                         echo 'Detected language: Python'
                     }
                     else if (fileExists('node-demo/package.json')) {
                         env.DETECTED_LANGUAGE = 'node'
+                        env.APP_DIR = 'node-demo'
+                        env.IMAGE_NAME = 'secure-cicd-node-app:latest'
+
                         echo 'Detected language: Node.js'
                     }
                     else {
                         error 'Unable to detect supported project language.'
                     }
-
                 }
             }
         }
@@ -31,7 +36,7 @@ pipeline {
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
-                        bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pip install -r requirements.txt'
+                        bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pip install -r python-demo/requirements.txt'
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'node') {
@@ -39,7 +44,6 @@ pipeline {
                         bat 'cd node-demo && npm install'
 
                     }
-
                 }
             }
         }
@@ -50,7 +54,7 @@ pipeline {
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
-                        bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pytest'
+                        bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pytest python-demo/tests'
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'node') {
@@ -58,7 +62,6 @@ pipeline {
                         bat 'cd node-demo && npm test'
 
                     }
-
                 }
             }
         }
@@ -69,7 +72,7 @@ pipeline {
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
-                        bat 'docker build -t secure-cicd-app:latest .'
+                        bat 'docker build -t secure-cicd-app:latest python-demo'
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'node') {
@@ -77,7 +80,6 @@ pipeline {
                         bat 'docker build -t secure-cicd-node-app:latest node-demo'
 
                     }
-
                 }
             }
         }
@@ -102,6 +104,7 @@ pipeline {
 
         stage('Docker Push') {
             steps {
+
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-credentials',
                     usernameVariable: 'DOCKER_USERNAME',
@@ -126,7 +129,6 @@ pipeline {
                             bat 'docker push %DOCKER_USERNAME%/secure-cicd-node-app:latest'
 
                         }
-
                     }
                 }
             }
