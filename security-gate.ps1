@@ -1,10 +1,19 @@
 $trivy = "C:\trivy\trivy.exe"
-$image = "secure-cicd-app:latest"
+
+# Select Docker image based on detected project language
+if ($env:DETECTED_LANGUAGE -eq "node") {
+    $image = "secure-cicd-node-app:latest"
+}
+else {
+    $image = "secure-cicd-app:latest"
+}
+
 $report = "trivy-report.json"
 $summary = "trivy-summary.txt"
 $previous = "previous-security.txt"
 
 Write-Host "Starting security scan..."
+Write-Host "Scanning image: $image"
 
 & $trivy image --format json --output $report $image
 
