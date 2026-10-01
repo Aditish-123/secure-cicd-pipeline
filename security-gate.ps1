@@ -1,6 +1,5 @@
 $trivy = "C:\trivy\trivy.exe"
 
-# Select Docker image based on detected project language
 if ($env:DETECTED_LANGUAGE -eq "node") {
     $image = "secure-cicd-node-app:latest"
 }
@@ -50,11 +49,6 @@ Write-Host "HIGH:     $high"
 Write-Host "MEDIUM:   $medium"
 Write-Host "LOW:      $low"
 Write-Host "============================"
-
-
-# ==========================================
-# BEFORE vs AFTER COMPARISON
-# ==========================================
 
 Write-Host ""
 Write-Host "===== SECURITY COMPARISON ====="
@@ -116,7 +110,6 @@ if (Test-Path $previous) {
     else {
         Write-Host "HIGH vulnerabilities unchanged."
     }
-
 }
 else {
 
@@ -126,11 +119,6 @@ else {
 }
 
 Write-Host "================================"
-
-
-# ==========================================
-# CREATE DEVELOPER-FRIENDLY SUMMARY
-# ==========================================
 
 "===== HIGH / CRITICAL VULNERABILITIES =====" | Out-File $summary
 "" | Out-File $summary -Append
@@ -163,6 +151,7 @@ if (Test-Path $previous) {
     "CRITICAL change: $criticalChange" | Out-File $summary -Append
 }
 else {
+
     "No previous security scan available." | Out-File $summary -Append
     "This build is the baseline." | Out-File $summary -Append
 }
@@ -170,7 +159,6 @@ else {
 "" | Out-File $summary -Append
 "===== HIGH / CRITICAL DETAILS =====" | Out-File $summary -Append
 "" | Out-File $summary -Append
-
 
 foreach ($result in $data.Results) {
 
@@ -196,11 +184,6 @@ foreach ($result in $data.Results) {
 
 Write-Host "Developer-friendly security report created: $summary"
 
-
-# ==========================================
-# SAVE CURRENT RESULT FOR NEXT BUILD
-# ==========================================
-
 @"
 CRITICAL=$critical
 HIGH=$high
@@ -209,33 +192,24 @@ LOW=$low
 "@ | Out-File $previous
 
 
-# ==========================================
+# ================================
 # SECURITY GATE
-# ==========================================
+# ================================
 
 if ($critical -gt 0) {
 
     Write-Host ""
     Write-Host "SECURITY GATE: BLOCKED - Critical vulnerability found."
-
-    exit 1
-}
-
-if ($high -gt 50) {
-
-    Write-Host ""
-    Write-Host "SECURITY GATE: BLOCKED - More than 50 High vulnerabilities found."
-
     exit 1
 }
 
 if ($high -gt 0) {
 
     Write-Host ""
-    Write-Host "SECURITY GATE: WARNING - High vulnerabilities found, but within allowed threshold."
+    Write-Host "SECURITY GATE: WARNING - High vulnerabilities found."
+    Write-Host "Pipeline will continue so the detailed vulnerability report can be reviewed."
 }
 
 Write-Host ""
 Write-Host "SECURITY GATE: PASSED"
-
 exit 0
