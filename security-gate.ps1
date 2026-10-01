@@ -15,7 +15,7 @@ $previous = "previous-security.txt"
 Write-Host "Starting security scan..."
 Write-Host "Scanning image: $image"
 
-& $trivy image --format json --output $report $image
+& $trivy image --scanners vuln --format json --output $report $image
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Trivy scan failed."
