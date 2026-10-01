@@ -29,7 +29,18 @@ pipeline {
 
         stage('Security Gate') {
             steps {
-                bat 'powershell -ExecutionPolicy Bypass -File .\\security-gate.ps1'
+                script {
+
+                    def previousBuild = currentBuild.previousBuild
+
+                    if (previousBuild != null) {
+                        env.PREVIOUS_BUILD_NUMBER = previousBuild.number.toString()
+                    } else {
+                        env.PREVIOUS_BUILD_NUMBER = "NONE"
+                    }
+
+                    bat 'powershell -ExecutionPolicy Bypass -File .\\security-gate.ps1'
+                }
             }
         }
 
@@ -54,8 +65,11 @@ pipeline {
     post {
         always {
             echo 'Archiving Trivy security reports...'
+
             bat 'dir trivy-report.json trivy-summary.txt'
-            archiveArtifacts artifacts: 'trivy-report.json,trivy-summary.txt', allowEmptyArchive: false
+
+            archiveArtifacts artifacts: 'trivy-report.json,trivy-summary.txt',
+                             allowEmptyArchive: false
         }
     }
 }
