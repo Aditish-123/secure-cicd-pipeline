@@ -6,10 +6,6 @@ pipeline {
         maven 'Maven-3.9.14'
     }
 
-    environment {
-        DOCKERHUB_USERNAME = 'aditi1166'
-    }
-
     stages {
 
         // ============================================
@@ -48,7 +44,7 @@ pipeline {
 
 
         // ============================================
-        // 2. VALIDATE APPLICATION
+        // 2. VALIDATE APPLICATION SELECTION
         // ============================================
 
         stage('Validate Application Selection') {
@@ -257,7 +253,6 @@ pipeline {
 
         // ============================================
         // 8. DOCKER PUSH
-        // TEMPORARY DIAGNOSTIC VERSION
         // ============================================
 
         stage('Docker Push') {
@@ -272,6 +267,10 @@ pipeline {
                         )
                     ]) {
 
+                        // -----------------------------
+                        // Docker Hub Login Diagnostic
+                        // -----------------------------
+
                         bat '''
                             echo Docker username: %DOCKER_USERNAME%
                             echo Docker password check: %DOCKER_PASSWORD:~0,1%********
@@ -279,8 +278,12 @@ pipeline {
                             docker logout
 
                             echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
-                        }
+                        '''
 
+
+                        // -----------------------------
+                        // Python Push
+                        // -----------------------------
 
                         if (env.DETECTED_LANGUAGE == 'python') {
 
@@ -288,24 +291,39 @@ pipeline {
                                 docker tag secure-cicd-app:latest aditi1166/secure-cicd-app:latest
                                 docker push aditi1166/secure-cicd-app:latest
                             '''
-
                         }
+
+
+                        // -----------------------------
+                        // Node Push
+                        // -----------------------------
+
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
                             bat '''
                                 docker tag secure-cicd-node-app:latest aditi1166/secure-cicd-node-app:latest
                                 docker push aditi1166/secure-cicd-node-app:latest
                             '''
-
                         }
+
+
+                        // -----------------------------
+                        // Java Push
+                        // -----------------------------
+
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
                             bat '''
                                 docker tag secure-cicd-java-app:latest aditi1166/secure-cicd-java-app:latest
                                 docker push aditi1166/secure-cicd-java-app:latest
                             '''
-
                         }
+
+
+                        // -----------------------------
+                        // No Application
+                        // -----------------------------
+
                         else {
 
                             echo "No application selected. Docker push skipped."
