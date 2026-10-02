@@ -8,10 +8,6 @@ pipeline {
 
     stages {
 
-        // ============================================
-        // 1. DETECT APPLICATION
-        // ============================================
-
         stage('Detect Application') {
             steps {
                 script {
@@ -43,10 +39,6 @@ pipeline {
         }
 
 
-        // ============================================
-        // 2. VALIDATE APPLICATION SELECTION
-        // ============================================
-
         stage('Validate Application Selection') {
             steps {
                 script {
@@ -63,10 +55,6 @@ pipeline {
             }
         }
 
-
-        // ============================================
-        // 3. INSTALL DEPENDENCIES
-        // ============================================
 
         stage('Install Dependencies') {
             steps {
@@ -104,10 +92,6 @@ pipeline {
             }
         }
 
-
-        // ============================================
-        // 4. TEST
-        // ============================================
 
         stage('Test') {
             steps {
@@ -147,10 +131,6 @@ pipeline {
         }
 
 
-        // ============================================
-        // 5. BUILD APPLICATION
-        // ============================================
-
         stage('Build Application') {
             steps {
                 script {
@@ -181,10 +161,6 @@ pipeline {
             }
         }
 
-
-        // ============================================
-        // 6. DOCKER BUILD
-        // ============================================
 
         stage('Docker Build') {
             steps {
@@ -223,10 +199,6 @@ pipeline {
         }
 
 
-        // ============================================
-        // 7. SECURITY GATE
-        // ============================================
-
         stage('Security Gate') {
             steps {
                 script {
@@ -252,7 +224,7 @@ pipeline {
 
 
         // ============================================
-        // 8. DOCKER PUSH
+        // DOCKER PUSH
         // ============================================
 
         stage('Docker Push') {
@@ -267,63 +239,37 @@ pipeline {
                         )
                     ]) {
 
-                        // -----------------------------
-                        // Docker Hub Login Diagnostic
-                        // -----------------------------
+                        echo "Docker Hub username loaded from Jenkins Credentials."
 
                         bat '''
-                            echo Docker username: %DOCKER_USERNAME%
-                            echo Docker password check: %DOCKER_PASSWORD:~0,1%********
-
                             docker logout
-
                             echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
                         '''
-
-
-                        // -----------------------------
-                        // Python Push
-                        // -----------------------------
 
                         if (env.DETECTED_LANGUAGE == 'python') {
 
                             bat '''
-                                docker tag secure-cicd-app:latest aditi1166/secure-cicd-app:latest
-                                docker push aditi1166/secure-cicd-app:latest
+                                docker tag secure-cicd-app aditi1166/secure-cicd-app
+                                docker push aditi1166/secure-cicd-app
                             '''
+
                         }
-
-
-                        // -----------------------------
-                        // Node Push
-                        // -----------------------------
-
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
                             bat '''
-                                docker tag secure-cicd-node-app:latest aditi1166/secure-cicd-node-app:latest
-                                docker push aditi1166/secure-cicd-node-app:latest
+                                docker tag secure-cicd-node-app aditi1166/secure-cicd-node-app
+                                docker push aditi1166/secure-cicd-node-app
                             '''
+
                         }
-
-
-                        // -----------------------------
-                        // Java Push
-                        // -----------------------------
-
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
                             bat '''
-                                docker tag secure-cicd-java-app:latest aditi1166/secure-cicd-java-app:latest
-                                docker push aditi1166/secure-cicd-java-app:latest
+                                docker tag secure-cicd-java-app aditi1166/secure-cicd-java-app
+                                docker push aditi1166/secure-cicd-java-app
                             '''
+
                         }
-
-
-                        // -----------------------------
-                        // No Application
-                        // -----------------------------
-
                         else {
 
                             echo "No application selected. Docker push skipped."
@@ -335,7 +281,7 @@ pipeline {
 
 
         // ============================================
-        // 9. DEPLOY TO EC2
+        // DEPLOY TO EC2
         // ============================================
 
         stage('Deploy to EC2') {
@@ -365,15 +311,13 @@ pipeline {
                     ]) {
 
                         bat '''
-
                             icacls "%SSH_KEY%" /inheritance:r
                             icacls "%SSH_KEY%" /remove:g "BUILTIN\\Users"
                             icacls "%SSH_KEY%" /remove:g "Everyone"
                             icacls "%SSH_KEY%" /grant:r "SYSTEM":F
                             icacls "%SSH_KEY%" /setowner "SYSTEM"
 
-                            ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin && docker pull aditi1166/secure-cicd-app:latest && docker stop secure-cicd-app 2>nul || true && docker rm secure-cicd-app 2>nul || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app:latest"
-
+                            ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin && docker pull aditi1166/secure-cicd-app && docker stop secure-cicd-app 2>nul || true && docker rm secure-cicd-app 2>nul || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app"
                         '''
                     }
                 }
@@ -382,7 +326,7 @@ pipeline {
 
 
         // ============================================
-        // 10. HEALTH CHECK
+        // HEALTH CHECK
         // ============================================
 
         stage('Health Check') {
