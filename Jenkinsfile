@@ -27,22 +27,15 @@ pipeline {
                     echo changedFiles
 
                     if (changedFiles.contains('python-demo/')) {
-
                         env.DETECTED_LANGUAGE = 'python'
-
                     }
                     else if (changedFiles.contains('node-demo/')) {
-
                         env.DETECTED_LANGUAGE = 'node'
-
                     }
                     else if (changedFiles.contains('java-demo/')) {
-
                         env.DETECTED_LANGUAGE = 'java'
-
                     }
                     else {
-
                         env.DETECTED_LANGUAGE = 'none'
                     }
 
@@ -66,7 +59,6 @@ pipeline {
 
                         echo "No application code changed."
                         echo "Application build stages will be skipped."
-
                     }
                 }
             }
@@ -304,7 +296,6 @@ pipeline {
                             echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
                         '''
 
-
                         if (env.DETECTED_LANGUAGE == 'python') {
 
                             bat '''
@@ -314,7 +305,6 @@ pipeline {
                             '''
                         }
 
-
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
                             bat '''
@@ -323,7 +313,6 @@ pipeline {
                                 docker push aditi1166/secure-cicd-node-app:latest
                             '''
                         }
-
 
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
@@ -340,33 +329,16 @@ pipeline {
 
 
         // ============================================
-        // 9. TEST EC2 NETWORK
+        // 9. DEPLOY TO AWS EC2
         // ============================================
 
-        stage('Test EC2 Network') {
+        stage('Deploy to EC2') {
 
-            steps {
-
-                bat '''
-                    echo ============================================
-                    echo TESTING EC2 NETWORK CONNECTION
-                    echo ============================================
-
-                    powershell -Command "Test-NetConnection ec2-51-20-7-125.eu-north-1.compute.amazonaws.com -Port 22"
-
-                    echo ============================================
-                    echo EC2 NETWORK TEST COMPLETED
-                    echo ============================================
-                '''
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE == 'python'
+                }
             }
-        }
-
-
-        // ============================================
-        // 10. TEST EC2 SSH CONNECTION
-        // ============================================
-
-        stage('Test EC2 SSH Connection') {
 
             steps {
 
@@ -378,34 +350,65 @@ pipeline {
                     )
                 ]) {
 
-                    echo 'Testing Jenkins to EC2 SSH connection...'
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-credentials',
+                            usernameVariable: 'DOCKER_USERNAME',
+                            passwordVariable: 'DOCKER_PASSWORD'
+                        )
+                    ]) {
+
+                        echo 'Deploying Python application to AWS EC2...'
+
+                        bat '''
+                            echo ============================================
+                            echo FIXING SSH KEY PERMISSIONS
+                            echo ============================================
+
+                            icacls "%SSH_KEY%" /inheritance:r
+
+                            icacls "%SSH_KEY%" /remove:g "BUILTIN\\Users"
+
+                            icacls "%SSH_KEY%" /remove:g "Everyone"
+
+                            icacls "%SSH_KEY%" /grant:r "SYSTEM":F
+
+                            icacls "%SSH_KEY%" /setowner "SYSTEM"
+
+                            echo ============================================
+                            echo DEPLOYING TO EC2
+                            echo ============================================
+
+                            ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin && docker pull aditi1166/secure-cicd-app:latest && docker stop secure-cicd-app 2>nul || true && docker rm secure-cicd-app 2>nul || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app:latest"
+                        '''
+                    }
+                }
+            }
+        }
+
+
+        // ============================================
+        // 10. HEALTH CHECK
+        // ============================================
+
+        stage('Health Check') {
+
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE == 'python'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    echo 'Waiting for application to start...'
+
+                    sleep(time: 10, unit: 'SECONDS')
 
                     bat '''
-                        echo ============================================
-                        echo FIXING PRIVATE KEY PERMISSIONS
-                        echo ============================================
-
-                        icacls "%SSH_KEY%" /inheritance:r
-
-                        icacls "%SSH_KEY%" /remove:g "BUILTIN\\Users"
-
-                        icacls "%SSH_KEY%" /remove:g "Everyone"
-
-                        icacls "%SSH_KEY%" /grant:r "SYSTEM":F
-
-                        icacls "%SSH_KEY%" /setowner "SYSTEM"
-
-                        echo ============================================
-                        echo PRIVATE KEY PERMISSIONS
-                        echo ============================================
-
-                        icacls "%SSH_KEY%"
-
-                        echo ============================================
-                        echo TESTING EC2 SSH
-                        echo ============================================
-
-                        ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker --version"
+                        powershell -Command "$response = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; Write-Host $response.Content; if ($response.StatusCode -ne 200) { exit 1 }"
                     '''
                 }
             }
@@ -427,14 +430,12 @@ pipeline {
             )
         }
 
-
         success {
 
             echo '============================================'
-            echo 'PIPELINE COMPLETED SUCCESSFULLY'
+            echo 'CI/CD PIPELINE COMPLETED SUCCESSFULLY'
             echo '============================================'
         }
-
 
         failure {
 
