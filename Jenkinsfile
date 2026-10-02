@@ -179,7 +179,7 @@ Application stages will be skipped.
 
                         echo 'Installing Python dependencies...'
 
-                        bat '"C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pip install -r python-demo/requirements.txt'
+                        bat 'cd python-demo && "C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pytest tests'
                     }
 
 
