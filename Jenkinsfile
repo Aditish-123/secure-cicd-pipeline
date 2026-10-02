@@ -8,6 +8,10 @@ pipeline {
 
     stages {
 
+        // ============================================
+        // DETECT APPLICATION
+        // ============================================
+
         stage('Detect Application') {
             steps {
                 script {
@@ -39,6 +43,10 @@ pipeline {
         }
 
 
+        // ============================================
+        // VALIDATE APPLICATION
+        // ============================================
+
         stage('Validate Application Selection') {
             steps {
                 script {
@@ -55,6 +63,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // INSTALL DEPENDENCIES
+        // ============================================
 
         stage('Install Dependencies') {
             steps {
@@ -92,6 +104,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // TEST
+        // ============================================
 
         stage('Test') {
             steps {
@@ -131,6 +147,10 @@ pipeline {
         }
 
 
+        // ============================================
+        // BUILD APPLICATION
+        // ============================================
+
         stage('Build Application') {
             steps {
                 script {
@@ -161,6 +181,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // DOCKER BUILD
+        // ============================================
 
         stage('Docker Build') {
             steps {
@@ -198,6 +222,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // SECURITY GATE
+        // ============================================
 
         stage('Security Gate') {
             steps {
@@ -241,32 +269,43 @@ pipeline {
 
                         echo "Docker Hub username loaded from Jenkins Credentials."
 
+                        /*
+                         * Use a separate Docker configuration directory.
+                         * This prevents Jenkins from using an old or
+                         * conflicting Docker credential configuration.
+                         */
+
                         bat '''
-                            docker logout
-                            echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
+                            if exist "%WORKSPACE%\\.docker-jenkins" rmdir /s /q "%WORKSPACE%\\.docker-jenkins"
+
+                            mkdir "%WORKSPACE%\\.docker-jenkins"
+
+                            echo Docker username: %DOCKER_USERNAME%
+
+                            echo %DOCKER_PASSWORD% | docker --config "%WORKSPACE%\\.docker-jenkins" login -u %DOCKER_USERNAME% --password-stdin
                         '''
 
                         if (env.DETECTED_LANGUAGE == 'python') {
 
                             bat '''
-                                docker tag secure-cicd-app aditi1166/secure-cicd-app
-                                docker push aditi1166/secure-cicd-app
+                                docker tag secure-cicd-app:latest aditi1166/secure-cicd-app:latest
+                                docker push aditi1166/secure-cicd-app:latest
                             '''
 
                         }
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
                             bat '''
-                                docker tag secure-cicd-node-app aditi1166/secure-cicd-node-app
-                                docker push aditi1166/secure-cicd-node-app
+                                docker tag secure-cicd-node-app:latest aditi1166/secure-cicd-node-app:latest
+                                docker push aditi1166/secure-cicd-node-app:latest
                             '''
 
                         }
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
                             bat '''
-                                docker tag secure-cicd-java-app aditi1166/secure-cicd-java-app
-                                docker push aditi1166/secure-cicd-java-app
+                                docker tag secure-cicd-java-app:latest aditi1166/secure-cicd-java-app:latest
+                                docker push aditi1166/secure-cicd-java-app:latest
                             '''
 
                         }
@@ -312,12 +351,16 @@ pipeline {
 
                         bat '''
                             icacls "%SSH_KEY%" /inheritance:r
+
                             icacls "%SSH_KEY%" /remove:g "BUILTIN\\Users"
+
                             icacls "%SSH_KEY%" /remove:g "Everyone"
+
                             icacls "%SSH_KEY%" /grant:r "SYSTEM":F
+
                             icacls "%SSH_KEY%" /setowner "SYSTEM"
 
-                            ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin && docker pull aditi1166/secure-cicd-app && docker stop secure-cicd-app 2>nul || true && docker rm secure-cicd-app 2>nul || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app"
+                            ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin && docker pull aditi1166/secure-cicd-app:latest && docker stop secure-cicd-app 2>nul || true && docker rm secure-cicd-app 2>nul || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app:latest"
                         '''
                     }
                 }
