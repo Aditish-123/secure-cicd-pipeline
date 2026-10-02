@@ -363,7 +363,7 @@ pipeline {
 
 
         // ============================================
-        // 10. TEST EC2 SSH
+        // 10. TEST EC2 SSH CONNECTION
         // ============================================
 
         stage('Test EC2 SSH Connection') {
@@ -382,14 +382,30 @@ pipeline {
 
                     bat '''
                         echo ============================================
-                        echo TESTING EC2 SSH CONNECTION
+                        echo FIXING PRIVATE KEY PERMISSIONS
+                        echo ============================================
+
+                        icacls "%SSH_KEY%" /inheritance:r
+
+                        icacls "%SSH_KEY%" /remove:g "BUILTIN\\Users"
+
+                        icacls "%SSH_KEY%" /remove:g "Everyone"
+
+                        icacls "%SSH_KEY%" /grant:r "SYSTEM":F
+
+                        icacls "%SSH_KEY%" /setowner "SYSTEM"
+
+                        echo ============================================
+                        echo PRIVATE KEY PERMISSIONS
+                        echo ============================================
+
+                        icacls "%SSH_KEY%"
+
+                        echo ============================================
+                        echo TESTING EC2 SSH
                         echo ============================================
 
                         ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker --version"
-
-                        echo ============================================
-                        echo EC2 SSH TEST COMPLETED
-                        echo ============================================
                     '''
                 }
             }
