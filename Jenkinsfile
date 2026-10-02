@@ -327,6 +327,38 @@ Application stages will be skipped.
                 }
             }
         }
+
+
+        /*
+         * TEMPORARY TEST
+         *
+         * This stage only verifies that Jenkins
+         * can SSH into the EC2 instance.
+         *
+         * Actual deployment will be added
+         * after this connection test succeeds.
+         */
+
+        stage('Test EC2 SSH Connection') {
+
+            steps {
+
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-ssh-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+
+                    echo 'Testing SSH connection to AWS EC2...'
+
+                    bat '''
+                        ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker --version"
+                    '''
+                }
+            }
+        }
     }
 
 
