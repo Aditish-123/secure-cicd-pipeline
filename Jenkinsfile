@@ -8,107 +8,81 @@ pipeline {
 
     stages {
 
-        stage('Checkout & Detect Application') {
+        // ============================================
+        // 1. DETECT CHANGED APPLICATION
+        // ============================================
+
+        stage('Detect Application') {
 
             steps {
-
-                echo 'Checking out source code from GitHub...'
 
                 script {
 
                     def changedFiles = bat(
-                        script: '@git diff-tree --no-commit-id --name-only -r HEAD',
+                        script: 'git diff-tree --no-commit-id --name-only -r HEAD',
                         returnStdout: true
                     ).trim()
 
-                    echo "Files changed in latest commit:"
+                    echo "Changed files:"
                     echo changedFiles
 
-                    def pythonChanged = changedFiles.readLines().any {
-                        it.startsWith('python-demo/')
-                    }
-
-                    def nodeChanged = changedFiles.readLines().any {
-                        it.startsWith('node-demo/')
-                    }
-
-                    def javaChanged = changedFiles.readLines().any {
-                        it.startsWith('java-demo/')
-                    }
-
-                    def detectedCount = 0
-
-                    if (pythonChanged) {
-                        detectedCount++
-                    }
-
-                    if (nodeChanged) {
-                        detectedCount++
-                    }
-
-                    if (javaChanged) {
-                        detectedCount++
-                    }
-
-                    if (detectedCount > 1) {
-
-                        error '''
-Multiple application types were changed in the same commit.
-
-Please change only one application at a time:
-
-Python OR Node.js OR Java.
-'''
-                    }
-
-                    if (pythonChanged) {
+                    if (
+                        changedFiles.contains('python-demo/')
+                    ) {
 
                         env.DETECTED_LANGUAGE = 'python'
-                        env.APP_DIR = 'python-demo'
-                        env.IMAGE_NAME = 'secure-cicd-app:latest'
 
-                        echo 'Detected application language: Python'
                     }
-
-                    else if (nodeChanged) {
+                    else if (
+                        changedFiles.contains('node-demo/')
+                    ) {
 
                         env.DETECTED_LANGUAGE = 'node'
-                        env.APP_DIR = 'node-demo'
-                        env.IMAGE_NAME = 'secure-cicd-node-app:latest'
 
-                        echo 'Detected application language: Node.js'
                     }
-
-                    else if (javaChanged) {
+                    else if (
+                        changedFiles.contains('java-demo/')
+                    ) {
 
                         env.DETECTED_LANGUAGE = 'java'
-                        env.APP_DIR = 'java-demo'
-                        env.IMAGE_NAME = 'secure-cicd-java-app:latest'
 
-                        echo 'Detected application language: Java'
                     }
-
                     else {
 
                         env.DETECTED_LANGUAGE = 'none'
-                        env.APP_DIR = ''
-                        env.IMAGE_NAME = ''
 
-                        echo '''
-No application changes detected.
-
-The latest commit only changed pipeline/support files.
-Application stages will be skipped.
-'''
                     }
 
-                    echo "Application language: ${env.DETECTED_LANGUAGE}"
-                    echo "Application directory: ${env.APP_DIR}"
-                    echo "Docker image: ${env.IMAGE_NAME}"
+                    echo "Detected application: ${env.DETECTED_LANGUAGE}"
                 }
             }
         }
 
+
+        // ============================================
+        // 2. CHECK MULTIPLE APPLICATIONS
+        // ============================================
+
+        stage('Validate Application Selection') {
+
+            steps {
+
+                script {
+
+                    if (env.DETECTED_LANGUAGE == 'none') {
+
+                        echo "No application code changed."
+                        echo "Application build stages will be skipped."
+
+                    }
+                }
+            }
+        }
+
+
+        // ============================================
+        // 3. INSTALL DEPENDENCIES
+        // ============================================
 
         stage('Install Dependencies') {
 
@@ -124,28 +98,38 @@ Application stages will be skipped.
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
-                        echo 'Installing Python dependencies...'
+                        bat '''
+                            cd python-demo
 
-                        bat 'cd python-demo && "C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pip install -r requirements.txt'
+                            C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python314\\python.exe -m pip install -r requirements.txt
+                        '''
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
-                        echo 'Installing Node.js dependencies...'
+                        bat '''
+                            cd node-demo
 
-                        bat 'cd node-demo && npm install'
+                            npm install
+                        '''
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
 
-                        echo 'Preparing Java/Maven project...'
+                        bat '''
+                            cd java-demo
 
-                        bat 'cd java-demo && mvn -B test'
+                            mvn clean install -DskipTests
+                        '''
                     }
                 }
             }
         }
 
+
+        // ============================================
+        // 4. TEST APPLICATION
+        // ============================================
 
         stage('Test') {
 
@@ -161,30 +145,40 @@ Application stages will be skipped.
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
-                        echo 'Running Python tests...'
+                        bat '''
+                            cd python-demo
 
-                        bat 'cd python-demo && "C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pytest tests'
+                            C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python314\\python.exe -m pytest tests
+                        '''
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
-                        echo 'Running Node.js tests...'
+                        bat '''
+                            cd node-demo
 
-                        bat 'cd node-demo && npm test'
+                            npm test
+                        '''
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
 
-                        echo 'Running Java application test...'
+                        bat '''
+                            cd java-demo
 
-                        bat 'cd java-demo && java -cp "target\\classes;target\\test-classes" com.securecicd.AppTest'
+                            mvn test
 
-                        echo 'Java test completed successfully.'
+                            java -cp "target\\classes;target\\test-classes" com.securecicd.AppTest
+                        '''
                     }
                 }
             }
         }
 
+
+        // ============================================
+        // 5. BUILD APPLICATION
+        // ============================================
 
         stage('Build Application') {
 
@@ -198,21 +192,32 @@ Application stages will be skipped.
 
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'java') {
+                    if (env.DETECTED_LANGUAGE == 'python') {
 
-                        echo 'Building Java JAR with Maven...'
-
-                        bat 'cd java-demo && mvn -B package -DskipTests'
+                        echo "Python application does not require separate build."
                     }
 
-                    else {
+                    else if (env.DETECTED_LANGUAGE == 'node') {
 
-                        echo 'No separate application build command required.'
+                        echo "Node.js application does not require separate build."
+                    }
+
+                    else if (env.DETECTED_LANGUAGE == 'java') {
+
+                        bat '''
+                            cd java-demo
+
+                            mvn package -DskipTests
+                        '''
                     }
                 }
             }
         }
 
+
+        // ============================================
+        // 6. DOCKER BUILD
+        // ============================================
 
         stage('Docker Build') {
 
@@ -226,13 +231,40 @@ Application stages will be skipped.
 
                 script {
 
-                    echo "Building Docker image for ${env.DETECTED_LANGUAGE}..."
+                    if (env.DETECTED_LANGUAGE == 'python') {
 
-                    bat "docker build -t ${env.IMAGE_NAME} ${env.APP_DIR}"
+                        bat '''
+                            cd python-demo
+
+                            docker build -t secure-cicd-app:latest .
+                        '''
+                    }
+
+                    else if (env.DETECTED_LANGUAGE == 'node') {
+
+                        bat '''
+                            cd node-demo
+
+                            docker build -t secure-cicd-node-app:latest .
+                        '''
+                    }
+
+                    else if (env.DETECTED_LANGUAGE == 'java') {
+
+                        bat '''
+                            cd java-demo
+
+                            docker build -t secure-cicd-java-app:latest .
+                        '''
+                    }
                 }
             }
         }
 
+
+        // ============================================
+        // 7. SECURITY GATE
+        // ============================================
 
         stage('Security Gate') {
 
@@ -244,28 +276,16 @@ Application stages will be skipped.
 
             steps {
 
-                script {
-
-                    def previousBuild = currentBuild.previousBuild
-
-                    if (previousBuild != null) {
-
-                        env.PREVIOUS_BUILD_NUMBER =
-                            previousBuild.number.toString()
-                    }
-
-                    else {
-
-                        env.PREVIOUS_BUILD_NUMBER = "NONE"
-                    }
-
-                    echo 'Running Trivy security scan...'
-
-                    bat 'powershell -ExecutionPolicy Bypass -File .\\security-gate.ps1'
-                }
+                bat '''
+                    powershell -ExecutionPolicy Bypass -File .\\security-gate.ps1
+                '''
             }
         }
 
+
+        // ============================================
+        // 8. DOCKER PUSH
+        // ============================================
 
         stage('Docker Push') {
 
@@ -277,51 +297,45 @@ Application stages will be skipped.
 
             steps {
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USERNAME',
-                        passwordVariable: 'DOCKER_PASSWORD'
-                    )
-                ]) {
+                script {
 
-                    echo 'Logging into Docker Hub...'
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-credentials',
+                            usernameVariable: 'DOCKER_USERNAME',
+                            passwordVariable: 'DOCKER_PASSWORD'
+                        )
+                    ]) {
 
-                    bat 'docker login -u %DOCKER_USERNAME% -p %DOCKER_PASSWORD%'
-
-                    script {
+                        bat '''
+                            echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
+                        '''
 
                         if (env.DETECTED_LANGUAGE == 'python') {
 
-                            echo 'Tagging Python Docker image...'
+                            bat '''
+                                docker tag secure-cicd-app:latest aditi1166/secure-cicd-app:latest
 
-                            bat 'docker tag secure-cicd-app:latest %DOCKER_USERNAME%/secure-cicd-app:latest'
-
-                            echo 'Pushing Python Docker image...'
-
-                            bat 'docker push %DOCKER_USERNAME%/secure-cicd-app:latest'
+                                docker push aditi1166/secure-cicd-app:latest
+                            '''
                         }
 
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
-                            echo 'Tagging Node.js Docker image...'
+                            bat '''
+                                docker tag secure-cicd-node-app:latest aditi1166/secure-cicd-node-app:latest
 
-                            bat 'docker tag secure-cicd-node-app:latest %DOCKER_USERNAME%/secure-cicd-node-app:latest'
-
-                            echo 'Pushing Node.js Docker image...'
-
-                            bat 'docker push %DOCKER_USERNAME%/secure-cicd-node-app:latest'
+                                docker push aditi1166/secure-cicd-node-app:latest
+                            '''
                         }
 
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
-                            echo 'Tagging Java Docker image...'
+                            bat '''
+                                docker tag secure-cicd-java-app:latest aditi1166/secure-cicd-java-app:latest
 
-                            bat 'docker tag secure-cicd-java-app:latest %DOCKER_USERNAME%/secure-cicd-java-app:latest'
-
-                            echo 'Pushing Java Docker image...'
-
-                            bat 'docker push %DOCKER_USERNAME%/secure-cicd-java-app:latest'
+                                docker push aditi1166/secure-cicd-java-app:latest
+                            '''
                         }
                     }
                 }
@@ -329,15 +343,9 @@ Application stages will be skipped.
         }
 
 
-        /*
-         * TEMPORARY TEST
-         *
-         * This stage only verifies that Jenkins
-         * can SSH into the EC2 instance.
-         *
-         * Actual deployment will be added
-         * after this connection test succeeds.
-         */
+        // ============================================
+        // 9. TEST EC2 SSH CONNECTION
+        // ============================================
 
         stage('Test EC2 SSH Connection') {
 
@@ -354,6 +362,16 @@ Application stages will be skipped.
                     echo 'Testing SSH connection to AWS EC2...'
 
                     bat '''
+                        echo Fixing SSH private key permissions...
+
+                        icacls "%SSH_KEY%" /inheritance:r
+
+                        icacls "%SSH_KEY%" /remove "BUILTIN\\Users"
+
+                        icacls "%SSH_KEY%" /remove "Everyone"
+
+                        echo Testing EC2 SSH connection...
+
                         ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker --version"
                     '''
                 }
@@ -362,17 +380,33 @@ Application stages will be skipped.
     }
 
 
+    // ============================================
+    // POST ACTIONS
+    // ============================================
+
     post {
 
         always {
 
-            echo 'Checking Trivy security reports...'
-
-            bat 'dir trivy-report.json trivy-summary.txt'
-
-            archiveArtifacts artifacts:
-                'trivy-report.json,trivy-summary.txt',
+            archiveArtifacts(
+                artifacts: 'trivy-report.json,trivy-summary.txt',
                 allowEmptyArchive: true
+            )
+        }
+
+        success {
+
+            echo '============================================'
+            echo 'PIPELINE COMPLETED SUCCESSFULLY'
+            echo '============================================'
+        }
+
+        failure {
+
+            echo '============================================'
+            echo 'PIPELINE FAILED'
+            echo 'CHECK THE CONSOLE OUTPUT'
+            echo '============================================'
         }
     }
 }
