@@ -8,10 +8,6 @@ pipeline {
 
     stages {
 
-        // ============================================
-        // DETECT APPLICATION
-        // ============================================
-
         stage('Detect Application') {
             steps {
                 script {
@@ -43,10 +39,6 @@ pipeline {
         }
 
 
-        // ============================================
-        // VALIDATE APPLICATION
-        // ============================================
-
         stage('Validate Application Selection') {
             steps {
                 script {
@@ -63,10 +55,6 @@ pipeline {
             }
         }
 
-
-        // ============================================
-        // INSTALL DEPENDENCIES
-        // ============================================
 
         stage('Install Dependencies') {
             steps {
@@ -104,10 +92,6 @@ pipeline {
             }
         }
 
-
-        // ============================================
-        // TEST
-        // ============================================
 
         stage('Test') {
             steps {
@@ -147,10 +131,6 @@ pipeline {
         }
 
 
-        // ============================================
-        // BUILD APPLICATION
-        // ============================================
-
         stage('Build Application') {
             steps {
                 script {
@@ -181,10 +161,6 @@ pipeline {
             }
         }
 
-
-        // ============================================
-        // DOCKER BUILD
-        // ============================================
 
         stage('Docker Build') {
             steps {
@@ -223,10 +199,6 @@ pipeline {
         }
 
 
-        // ============================================
-        // SECURITY GATE
-        // ============================================
-
         stage('Security Gate') {
             steps {
                 script {
@@ -252,11 +224,13 @@ pipeline {
 
 
         // ============================================
-        // DOCKER PUSH
+        // DOCKER HUB LOGIN TEST
         // ============================================
 
-        stage('Docker Push') {
+        stage('Docker Hub Login Test') {
+
             steps {
+
                 script {
 
                     withCredentials([
@@ -267,23 +241,38 @@ pipeline {
                         )
                     ]) {
 
-                        echo "Docker Hub username loaded from Jenkins Credentials."
-
-                        /*
-                         * Use a separate Docker configuration directory.
-                         * This prevents Jenkins from using an old or
-                         * conflicting Docker credential configuration.
-                         */
-
                         bat '''
-                            if exist "%WORKSPACE%\\.docker-jenkins" rmdir /s /q "%WORKSPACE%\\.docker-jenkins"
+                            if exist "%WORKSPACE%\\.docker-test" rmdir /s /q "%WORKSPACE%\\.docker-test"
 
-                            mkdir "%WORKSPACE%\\.docker-jenkins"
+                            mkdir "%WORKSPACE%\\.docker-test"
 
-                            echo Docker username: %DOCKER_USERNAME%
-
-                            echo %DOCKER_PASSWORD% | docker --config "%WORKSPACE%\\.docker-jenkins" login -u %DOCKER_USERNAME% --password-stdin
+                            powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                            "$password = $env:DOCKER_PASSWORD; ^
+                             $password | docker --config '%WORKSPACE%\\.docker-test' login -u $env:DOCKER_USERNAME --password-stdin"
                         '''
+                    }
+                }
+            }
+        }
+
+
+        // ============================================
+        // DOCKER PUSH
+        // ============================================
+
+        stage('Docker Push') {
+
+            steps {
+
+                script {
+
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-credentials',
+                            usernameVariable: 'DOCKER_USERNAME',
+                            passwordVariable: 'DOCKER_PASSWORD'
+                        )
+                    ]) {
 
                         if (env.DETECTED_LANGUAGE == 'python') {
 
@@ -351,13 +340,9 @@ pipeline {
 
                         bat '''
                             icacls "%SSH_KEY%" /inheritance:r
-
                             icacls "%SSH_KEY%" /remove:g "BUILTIN\\Users"
-
                             icacls "%SSH_KEY%" /remove:g "Everyone"
-
                             icacls "%SSH_KEY%" /grant:r "SYSTEM":F
-
                             icacls "%SSH_KEY%" /setowner "SYSTEM"
 
                             ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin && docker pull aditi1166/secure-cicd-app:latest && docker stop secure-cicd-app 2>nul || true && docker rm secure-cicd-app 2>nul || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app:latest"
