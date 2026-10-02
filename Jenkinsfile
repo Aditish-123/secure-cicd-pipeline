@@ -9,7 +9,7 @@ pipeline {
     stages {
 
         // ============================================
-        // 1. DETECT CHANGED APPLICATION
+        // 1. DETECT APPLICATION
         // ============================================
 
         stage('Detect Application') {
@@ -53,7 +53,7 @@ pipeline {
 
 
         // ============================================
-        // 2. VALIDATE APPLICATION SELECTION
+        // 2. VALIDATE APPLICATION
         // ============================================
 
         stage('Validate Application Selection') {
@@ -66,6 +66,7 @@ pipeline {
 
                         echo "No application code changed."
                         echo "Application build stages will be skipped."
+
                     }
                 }
             }
@@ -276,7 +277,7 @@ pipeline {
 
 
         // ============================================
-        // 8. DOCKER PUSH
+        // 8. DOCKER HUB PUSH
         // ============================================
 
         stage('Docker Push') {
@@ -303,6 +304,7 @@ pipeline {
                             echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
                         '''
 
+
                         if (env.DETECTED_LANGUAGE == 'python') {
 
                             bat '''
@@ -312,6 +314,7 @@ pipeline {
                             '''
                         }
 
+
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
                             bat '''
@@ -320,6 +323,7 @@ pipeline {
                                 docker push aditi1166/secure-cicd-node-app:latest
                             '''
                         }
+
 
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
@@ -336,7 +340,7 @@ pipeline {
 
 
         // ============================================
-        // 9. TEST EC2 NETWORK CONNECTION
+        // 9. TEST EC2 NETWORK
         // ============================================
 
         stage('Test EC2 Network') {
@@ -345,7 +349,7 @@ pipeline {
 
                 bat '''
                     echo ============================================
-                    echo TESTING CONNECTION FROM JENKINS TO EC2
+                    echo TESTING EC2 NETWORK CONNECTION
                     echo ============================================
 
                     powershell -Command "Test-NetConnection ec2-51-20-7-125.eu-north-1.compute.amazonaws.com -Port 22"
@@ -354,6 +358,40 @@ pipeline {
                     echo EC2 NETWORK TEST COMPLETED
                     echo ============================================
                 '''
+            }
+        }
+
+
+        // ============================================
+        // 10. TEST EC2 SSH
+        // ============================================
+
+        stage('Test EC2 SSH Connection') {
+
+            steps {
+
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-ssh-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+
+                    echo 'Testing Jenkins to EC2 SSH connection...'
+
+                    bat '''
+                        echo ============================================
+                        echo TESTING EC2 SSH CONNECTION
+                        echo ============================================
+
+                        ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker --version"
+
+                        echo ============================================
+                        echo EC2 SSH TEST COMPLETED
+                        echo ============================================
+                    '''
+                }
             }
         }
     }
@@ -373,12 +411,14 @@ pipeline {
             )
         }
 
+
         success {
 
             echo '============================================'
             echo 'PIPELINE COMPLETED SUCCESSFULLY'
             echo '============================================'
         }
+
 
         failure {
 
