@@ -1,24 +1,27 @@
 pipeline {
+
     agent any
-    
+
     tools {
-    maven 'Maven-3.9.14'
+        maven 'Maven-3.9.14'
     }
 
     stages {
 
+        // ============================================
+        // 1. CHECKOUT & APPLICATION DETECTION
+        // ============================================
+
         stage('Checkout & Detect Application') {
+
             steps {
+
                 echo 'Checking out source code from GitHub...'
 
                 script {
 
                     /*
-                     * Jenkins checks which application directory
-                     * was changed in the latest Git commit.
-                     *
-                     * This prevents Node.js from always being selected
-                     * just because node-demo appears first.
+                     * Find files changed in the latest commit.
                      */
 
                     def changedFiles = bat(
@@ -28,6 +31,11 @@ pipeline {
 
                     echo "Files changed in latest commit:"
                     echo changedFiles
+
+
+                    /*
+                     * Check which application directory changed.
+                     */
 
                     def pythonChanged = changedFiles.readLines().any {
                         it.startsWith('python-demo/')
@@ -40,6 +48,11 @@ pipeline {
                     def javaChanged = changedFiles.readLines().any {
                         it.startsWith('java-demo/')
                     }
+
+
+                    /*
+                     * Count how many application types changed.
+                     */
 
                     def detectedCount = 0
 
@@ -55,22 +68,26 @@ pipeline {
                         detectedCount++
                     }
 
+
                     /*
-                     * If multiple application types changed in the
-                     * same commit, do not randomly choose one.
+                     * If more than one application changed,
+                     * stop instead of randomly selecting one.
                      */
 
                     if (detectedCount > 1) {
+
                         error '''
 Multiple application types were changed in the same commit.
 
 Please change only one application at a time:
+
 Python OR Node.js OR Java.
 '''
                     }
 
+
                     /*
-                     * Detect Python
+                     * Python
                      */
 
                     if (pythonChanged) {
@@ -82,8 +99,9 @@ Python OR Node.js OR Java.
                         echo 'Detected application language: Python'
                     }
 
+
                     /*
-                     * Detect Node.js
+                     * Node.js
                      */
 
                     else if (nodeChanged) {
@@ -95,8 +113,9 @@ Python OR Node.js OR Java.
                         echo 'Detected application language: Node.js'
                     }
 
+
                     /*
-                     * Detect Java
+                     * Java
                      */
 
                     else if (javaChanged) {
@@ -108,25 +127,27 @@ Python OR Node.js OR Java.
                         echo 'Detected application language: Java'
                     }
 
+
                     /*
-                     * If no application folder changed,
-                     * do not randomly select Node/Python/Java.
+                     * Only pipeline/support files changed.
                      */
 
                     else {
 
-                        error '''
-No application changes were detected in the latest commit.
+                        env.DETECTED_LANGUAGE = 'none'
+                        env.APP_DIR = ''
+                        env.IMAGE_NAME = ''
 
-Please make a change inside:
-- python-demo/
-- node-demo/
-- java-demo/
+                        echo '''
+No application changes detected.
 
-Then commit the change.
+The latest commit only changed pipeline/support files.
+Application stages will be skipped.
 '''
                     }
 
+
+                    echo "Application language: ${env.DETECTED_LANGUAGE}"
                     echo "Application directory: ${env.APP_DIR}"
                     echo "Docker image: ${env.IMAGE_NAME}"
                 }
@@ -134,10 +155,25 @@ Then commit the change.
         }
 
 
+        // ============================================
+        // 2. INSTALL DEPENDENCIES
+        // ============================================
+
         stage('Install Dependencies') {
+
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE != 'none'
+                }
+            }
+
             steps {
 
                 script {
+
+                    /*
+                     * Python
+                     */
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
@@ -147,6 +183,10 @@ Then commit the change.
                     }
 
 
+                    /*
+                     * Node.js
+                     */
+
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
                         echo 'Installing Node.js dependencies...'
@@ -154,6 +194,10 @@ Then commit the change.
                         bat 'cd node-demo && npm install'
                     }
 
+
+                    /*
+                     * Java
+                     */
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
 
@@ -166,10 +210,25 @@ Then commit the change.
         }
 
 
+        // ============================================
+        // 3. TEST
+        // ============================================
+
         stage('Test') {
+
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE != 'none'
+                }
+            }
+
             steps {
 
                 script {
+
+                    /*
+                     * Python tests
+                     */
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
@@ -179,6 +238,10 @@ Then commit the change.
                     }
 
 
+                    /*
+                     * Node.js tests
+                     */
+
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
                         echo 'Running Node.js tests...'
@@ -187,13 +250,20 @@ Then commit the change.
                     }
 
 
+                    /*
+                     * Java tests
+                     */
+
                     else if (env.DETECTED_LANGUAGE == 'java') {
 
                         echo 'Running Java application test...'
 
                         /*
-                         * AppTest is currently a simple Java test class.
-                         * Maven compiles it, then we execute it explicitly.
+                         * AppTest is currently a simple Java class,
+                         * not a JUnit test.
+                         *
+                         * Maven compiles it first.
+                         * We execute it explicitly here.
                          */
 
                         bat 'cd java-demo && java -cp "target\\classes;target\\test-classes" com.securecicd.AppTest'
@@ -205,10 +275,25 @@ Then commit the change.
         }
 
 
+        // ============================================
+        // 4. BUILD APPLICATION
+        // ============================================
+
         stage('Build Application') {
+
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE != 'none'
+                }
+            }
+
             steps {
 
                 script {
+
+                    /*
+                     * Java requires Maven to create the JAR.
+                     */
 
                     if (env.DETECTED_LANGUAGE == 'java') {
 
@@ -216,6 +301,12 @@ Then commit the change.
 
                         bat 'cd java-demo && mvn -B package -DskipTests'
                     }
+
+
+                    /*
+                     * Python and Node.js are built directly
+                     * inside their Docker images.
+                     */
 
                     else {
 
@@ -226,7 +317,18 @@ Then commit the change.
         }
 
 
+        // ============================================
+        // 5. DOCKER BUILD
+        // ============================================
+
         stage('Docker Build') {
+
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE != 'none'
+                }
+            }
+
             steps {
 
                 script {
@@ -239,7 +341,18 @@ Then commit the change.
         }
 
 
+        // ============================================
+        // 6. SECURITY GATE
+        // ============================================
+
         stage('Security Gate') {
+
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE != 'none'
+                }
+            }
+
             steps {
 
                 script {
@@ -247,11 +360,16 @@ Then commit the change.
                     def previousBuild = currentBuild.previousBuild
 
                     if (previousBuild != null) {
-                        env.PREVIOUS_BUILD_NUMBER = previousBuild.number.toString()
+
+                        env.PREVIOUS_BUILD_NUMBER =
+                            previousBuild.number.toString()
                     }
+
                     else {
+
                         env.PREVIOUS_BUILD_NUMBER = "NONE"
                     }
+
 
                     echo 'Running Trivy security scan...'
 
@@ -261,7 +379,18 @@ Then commit the change.
         }
 
 
+        // ============================================
+        // 7. DOCKER PUSH
+        // ============================================
+
         stage('Docker Push') {
+
+            when {
+                expression {
+                    env.DETECTED_LANGUAGE != 'none'
+                }
+            }
+
             steps {
 
                 withCredentials([
@@ -279,6 +408,10 @@ Then commit the change.
 
                     script {
 
+                        /*
+                         * Python
+                         */
+
                         if (env.DETECTED_LANGUAGE == 'python') {
 
                             echo 'Tagging Python Docker image...'
@@ -291,6 +424,10 @@ Then commit the change.
                         }
 
 
+                        /*
+                         * Node.js
+                         */
+
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
                             echo 'Tagging Node.js Docker image...'
@@ -302,6 +439,10 @@ Then commit the change.
                             bat 'docker push %DOCKER_USERNAME%/secure-cicd-node-app:latest'
                         }
 
+
+                        /*
+                         * Java
+                         */
 
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
@@ -320,17 +461,26 @@ Then commit the change.
     }
 
 
+    // ============================================
+    // POST ACTIONS
+    // ============================================
+
     post {
 
         always {
 
-            echo 'Archiving Trivy security reports...'
+            echo 'Checking Trivy security reports...'
+
+            /*
+             * Reports may already exist from a previous build
+             * because Jenkins reuses the workspace.
+             */
 
             bat 'dir trivy-report.json trivy-summary.txt'
 
             archiveArtifacts artifacts:
                 'trivy-report.json,trivy-summary.txt',
-                allowEmptyArchive: false
+                allowEmptyArchive: true
         }
     }
 }
