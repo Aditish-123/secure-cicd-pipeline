@@ -8,6 +8,10 @@ pipeline {
 
     stages {
 
+        // ============================================
+        // DETECT APPLICATION
+        // ============================================
+
         stage('Detect Application') {
             steps {
                 script {
@@ -39,6 +43,10 @@ pipeline {
         }
 
 
+        // ============================================
+        // VALIDATE APPLICATION
+        // ============================================
+
         stage('Validate Application Selection') {
             steps {
                 script {
@@ -55,6 +63,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // INSTALL DEPENDENCIES
+        // ============================================
 
         stage('Install Dependencies') {
             steps {
@@ -92,6 +104,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // TEST
+        // ============================================
 
         stage('Test') {
             steps {
@@ -131,6 +147,10 @@ pipeline {
         }
 
 
+        // ============================================
+        // BUILD APPLICATION
+        // ============================================
+
         stage('Build Application') {
             steps {
                 script {
@@ -161,6 +181,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // DOCKER BUILD
+        // ============================================
 
         stage('Docker Build') {
             steps {
@@ -198,6 +222,10 @@ pipeline {
             }
         }
 
+
+        // ============================================
+        // SECURITY GATE
+        // ============================================
 
         stage('Security Gate') {
             steps {
@@ -246,9 +274,9 @@ pipeline {
 
                             mkdir "%WORKSPACE%\\.docker-test"
 
-                            powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                            "$password = $env:DOCKER_PASSWORD; ^
-                             $password | docker --config '%WORKSPACE%\\.docker-test' login -u $env:DOCKER_USERNAME --password-stdin"
+                            powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$env:DOCKER_PASSWORD | docker --config '%WORKSPACE%\\.docker-test' login --username $env:DOCKER_USERNAME --password-stdin"
+
+                            if errorlevel 1 exit /b %errorlevel%
                         '''
                     }
                 }
@@ -368,7 +396,7 @@ pipeline {
             steps {
 
                 bat '''
-                    powershell -Command "$response = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; Write-Host $response.Content; if ($response.StatusCode -ne 200) { exit 1 }"
+                    powershell -NoProfile -NonInteractive -Command "$response = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; Write-Host $response.Content; if ($response.StatusCode -ne 200) { exit 1 }"
                 '''
             }
         }
