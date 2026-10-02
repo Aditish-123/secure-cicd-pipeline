@@ -6,18 +6,24 @@ pipeline {
         maven 'Maven-3.9.14'
     }
 
-    stages {
+    environment {
+        DOCKER_USER = 'aditi1166'
 
-        // ============================================
-        // DETECT APPLICATION
-        // ============================================
+        EC2_HOST = 'ec2-51-20-7-125.eu-north-1.compute.amazonaws.com'
+        EC2_USER = 'ec2-user'
+    }
+
+    stages {
 
         stage('Detect Application') {
             steps {
                 script {
 
                     def changedFiles = bat(
-                        script: 'git diff-tree --no-commit-id --name-only -r HEAD',
+                        script: '''
+                            @echo off
+                            git diff --name-only HEAD~1 HEAD
+                        ''',
                         returnStdout: true
                     ).trim()
 
@@ -25,16 +31,37 @@ pipeline {
                     echo changedFiles
 
                     if (changedFiles.contains('python-demo/')) {
+
                         env.DETECTED_LANGUAGE = 'python'
+                        env.DOCKER_IMAGE = 'secure-cicd-app'
+                        env.DOCKER_REPO = 'aditi1166/secure-cicd-app'
+                        env.APP_PORT = '5000'
+                        env.CONTAINER_PORT = '5000'
+
                     }
                     else if (changedFiles.contains('node-demo/')) {
+
                         env.DETECTED_LANGUAGE = 'node'
+                        env.DOCKER_IMAGE = 'secure-cicd-node-app'
+                        env.DOCKER_REPO = 'aditi1166/secure-cicd-node-app'
+                        env.APP_PORT = '3000'
+                        env.CONTAINER_PORT = '3000'
+
                     }
                     else if (changedFiles.contains('java-demo/')) {
+
                         env.DETECTED_LANGUAGE = 'java'
+                        env.DOCKER_IMAGE = 'secure-cicd-java-app'
+                        env.DOCKER_REPO = 'aditi1166/secure-cicd-java-app'
+                        env.APP_PORT = '8081'
+                        env.CONTAINER_PORT = '8080'
+
                     }
                     else {
+
                         env.DETECTED_LANGUAGE = 'none'
+
+                        echo "No application folder changed."
                     }
 
                     echo "Detected application: ${env.DETECTED_LANGUAGE}"
@@ -43,30 +70,24 @@ pipeline {
         }
 
 
-        // ============================================
-        // VALIDATE APPLICATION
-        // ============================================
-
-        stage('Validate Application Selection') {
+        stage('Validate') {
             steps {
                 script {
 
-                    if (
-                        env.DETECTED_LANGUAGE != 'python' &&
-                        env.DETECTED_LANGUAGE != 'node' &&
-                        env.DETECTED_LANGUAGE != 'java' &&
-                        env.DETECTED_LANGUAGE != 'none'
-                    ) {
-                        error("Unknown application detected.")
+                    if (env.DETECTED_LANGUAGE == 'none') {
+
+                        echo "No application selected. Pipeline will stop."
+
+                        currentBuild.result = 'NOT_BUILT'
+                        error("No application changes detected.")
+
                     }
+
+                    echo "Application validation successful."
                 }
             }
         }
 
-
-        // ============================================
-        // INSTALL DEPENDENCIES
-        // ============================================
 
         stage('Install Dependencies') {
             steps {
@@ -76,7 +97,7 @@ pipeline {
 
                         bat '''
                             cd python-demo
-                            C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python314\\python.exe -m pip install -r requirements.txt
+                            python -m pip install -r requirements.txt
                         '''
 
                     }
@@ -84,7 +105,7 @@ pipeline {
 
                         bat '''
                             cd node-demo
-                            npm install
+                            echo Node.js application does not require external dependencies.
                         '''
 
                     }
@@ -92,22 +113,14 @@ pipeline {
 
                         bat '''
                             cd java-demo
-                            mvn clean install -DskipTests
+                            mvn clean compile
                         '''
 
-                    }
-                    else {
-
-                        echo "No application selected. Dependency installation skipped."
                     }
                 }
             }
         }
 
-
-        // ============================================
-        // TEST
-        // ============================================
 
         stage('Test') {
             steps {
@@ -117,7 +130,7 @@ pipeline {
 
                         bat '''
                             cd python-demo
-                            C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python314\\python.exe -m pytest tests
+                            pytest
                         '''
 
                     }
@@ -134,22 +147,23 @@ pipeline {
                         bat '''
                             cd java-demo
                             mvn test
-                            java -cp "target\\classes;target\\test-classes" com.securecicd.AppTest
+
+                            if errorlevel 1 exit /b %errorlevel%
+
+                            echo Running Java application validation...
+
+                            mvn package -DskipTests
+
+                            if errorlevel 1 exit /b %errorlevel%
+
+                            java -cp target/java-demo-1.0.0.jar com.securecicd.App
                         '''
 
-                    }
-                    else {
-
-                        echo "No application selected. Testing skipped."
                     }
                 }
             }
         }
 
-
-        // ============================================
-        // BUILD APPLICATION
-        // ============================================
 
         stage('Build Application') {
             steps {
@@ -157,12 +171,12 @@ pipeline {
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
-                        echo "Python application does not require separate build."
+                        echo "Python application build preparation complete."
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
-                        echo "Node.js application does not require separate build."
+                        echo "Node.js application build preparation complete."
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'java') {
@@ -173,18 +187,10 @@ pipeline {
                         '''
 
                     }
-                    else {
-
-                        echo "No application selected. Build skipped."
-                    }
                 }
             }
         }
 
-
-        // ============================================
-        // DOCKER BUILD
-        // ============================================
 
         stage('Docker Build') {
             steps {
@@ -193,72 +199,44 @@ pipeline {
                     if (env.DETECTED_LANGUAGE == 'python') {
 
                         bat '''
-                            cd python-demo
-                            docker build -t secure-cicd-app:latest .
+                            docker build -t secure-cicd-app:latest python-demo
                         '''
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
                         bat '''
-                            cd node-demo
-                            docker build -t secure-cicd-node-app:latest .
+                            docker build -t secure-cicd-node-app:latest node-demo
                         '''
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'java') {
 
                         bat '''
-                            cd java-demo
-                            docker build -t secure-cicd-java-app:latest .
+                            docker build -t secure-cicd-java-app:latest java-demo
                         '''
 
-                    }
-                    else {
-
-                        echo "No application selected. Docker build skipped."
                     }
                 }
             }
         }
 
-
-        // ============================================
-        // SECURITY GATE
-        // ============================================
 
         stage('Security Gate') {
             steps {
-                script {
+                powershell '''
+                    & "$env:WORKSPACE\\security-gate.ps1"
 
-                    if (
-                        env.DETECTED_LANGUAGE == 'python' ||
-                        env.DETECTED_LANGUAGE == 'node' ||
-                        env.DETECTED_LANGUAGE == 'java'
-                    ) {
-
-                        bat '''
-                            powershell -ExecutionPolicy Bypass -File .\\security-gate.ps1
-                        '''
-
+                    if ($LASTEXITCODE -ne 0) {
+                        exit $LASTEXITCODE
                     }
-                    else {
-
-                        echo "No application selected. Security Gate skipped."
-                    }
-                }
+                '''
             }
         }
 
 
-        // ============================================
-        // DOCKER HUB LOGIN TEST
-        // ============================================
-
         stage('Docker Hub Login Test') {
-
             steps {
-
                 script {
 
                     withCredentials([
@@ -284,14 +262,8 @@ pipeline {
         }
 
 
-        // ============================================
-        // DOCKER PUSH
-        // ============================================
-
         stage('Docker Push') {
-
             steps {
-
                 script {
 
                     withCredentials([
@@ -302,33 +274,42 @@ pipeline {
                         )
                     ]) {
 
+                        bat """
+                            docker tag ${env.DOCKER_IMAGE}:latest ${env.DOCKER_REPO}:latest
+
+                            docker push ${env.DOCKER_REPO}:latest
+                        """
+                    }
+                }
+            }
+        }
+
+
+        stage('Deploy to EC2') {
+            steps {
+                script {
+
+                    sshagent(credentials: ['ec2-ssh-key']) {
+
                         if (env.DETECTED_LANGUAGE == 'python') {
 
                             bat '''
-                                docker tag secure-cicd-app:latest aditi1166/secure-cicd-app:latest
-                                docker push aditi1166/secure-cicd-app:latest
+                                ssh -o StrictHostKeyChecking=no ec2-user@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker pull aditi1166/secure-cicd-app:latest && docker rm -f secure-cicd-app 2>/dev/null || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app:latest"
                             '''
 
                         }
                         else if (env.DETECTED_LANGUAGE == 'node') {
 
                             bat '''
-                                docker tag secure-cicd-node-app:latest aditi1166/secure-cicd-node-app:latest
-                                docker push aditi1166/secure-cicd-node-app:latest
+                                ssh -o StrictHostKeyChecking=no ec2-user@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker pull aditi1166/secure-cicd-node-app:latest && docker rm -f secure-cicd-node-app 2>/dev/null || true && docker run -d --name secure-cicd-node-app -p 3000:3000 aditi1166/secure-cicd-node-app:latest"
                             '''
 
                         }
                         else if (env.DETECTED_LANGUAGE == 'java') {
 
                             bat '''
-                                docker tag secure-cicd-java-app:latest aditi1166/secure-cicd-java-app:latest
-                                docker push aditi1166/secure-cicd-java-app:latest
+                                ssh -o StrictHostKeyChecking=no ec2-user@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker pull aditi1166/secure-cicd-java-app:latest && docker rm -f secure-cicd-java-app 2>/dev/null || true && docker run -d --name secure-cicd-java-app -p 8081:8080 aditi1166/secure-cicd-java-app:latest"
                             '''
-
-                        }
-                        else {
-
-                            echo "No application selected. Docker push skipped."
                         }
                     }
                 }
@@ -336,104 +317,54 @@ pipeline {
         }
 
 
-        // ============================================
-        // DEPLOY TO EC2
-        // ============================================
-
-        stage('Deploy to EC2') {
-
-            when {
-                expression {
-                    env.DETECTED_LANGUAGE == 'python'
-                }
-            }
-
+        stage('Health Check') {
             steps {
+                script {
 
-                withCredentials([
-                    sshUserPrivateKey(
-                        credentialsId: 'ec2-ssh-key',
-                        keyFileVariable: 'SSH_KEY',
-                        usernameVariable: 'SSH_USER'
-                    )
-                ]) {
+                    sleep(time: 10, unit: 'SECONDS')
 
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'dockerhub-credentials',
-                            usernameVariable: 'DOCKER_USERNAME',
-                            passwordVariable: 'DOCKER_PASSWORD'
-                        )
-                    ]) {
+                    if (env.DETECTED_LANGUAGE == 'python') {
 
                         bat '''
-                            icacls "%SSH_KEY%" /inheritance:r
-                            icacls "%SSH_KEY%" /remove:g "BUILTIN\\Users"
-                            icacls "%SSH_KEY%" /remove:g "Everyone"
-                            icacls "%SSH_KEY%" /grant:r "SYSTEM":F
-                            icacls "%SSH_KEY%" /setowner "SYSTEM"
+                            powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; if ($r.StatusCode -ne 200) { exit 1 }; Write-Host $r.Content } catch { exit 1 }"
+                        '''
 
-                            ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin && docker pull aditi1166/secure-cicd-app:latest && docker stop secure-cicd-app 2>nul || true && docker rm secure-cicd-app 2>nul || true && docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app:latest"
+                    }
+                    else if (env.DETECTED_LANGUAGE == 'node') {
+
+                        bat '''
+                            powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:3000/health' -UseBasicParsing; if ($r.StatusCode -ne 200) { exit 1 }; Write-Host $r.Content } catch { exit 1 }"
+                        '''
+
+                    }
+                    else if (env.DETECTED_LANGUAGE == 'java') {
+
+                        bat '''
+                            powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:8081/health' -UseBasicParsing; if ($r.StatusCode -ne 200) { exit 1 }; Write-Host $r.Content } catch { exit 1 }"
                         '''
                     }
                 }
             }
         }
-
-
-        // ============================================
-        // HEALTH CHECK
-        // ============================================
-
-        stage('Health Check') {
-
-            when {
-                expression {
-                    env.DETECTED_LANGUAGE == 'python'
-                }
-            }
-
-            steps {
-
-                bat '''
-                    powershell -NoProfile -NonInteractive -Command "$response = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; Write-Host $response.Content; if ($response.StatusCode -ne 200) { exit 1 }"
-                '''
-            }
-        }
     }
 
 
-    // ============================================
-    // POST ACTIONS
-    // ============================================
-
     post {
 
-        always {
-
-            archiveArtifacts(
-                artifacts: 'trivy-report.json,trivy-summary.txt',
-                allowEmptyArchive: true
-            )
-        }
-
         success {
-
-            echo '''
-============================================
-PIPELINE SUCCESSFUL
-============================================
-'''
+            echo "============================================"
+            echo "CI/CD PIPELINE SUCCESSFUL"
+            echo "============================================"
+            echo "Application: ${env.DETECTED_LANGUAGE}"
+            echo "Docker Image: ${env.DOCKER_REPO}:latest"
+            echo "Deployment completed successfully."
         }
 
         failure {
-
-            echo '''
-============================================
-PIPELINE FAILED
-CHECK THE CONSOLE OUTPUT
-============================================
-'''
+            echo "============================================"
+            echo "CI/CD PIPELINE FAILED"
+            echo "============================================"
+            echo "Application: ${env.DETECTED_LANGUAGE}"
         }
     }
 }
