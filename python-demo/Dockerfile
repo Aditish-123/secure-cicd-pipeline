@@ -4,6 +4,10 @@ WORKDIR /app
 
 COPY requirements.txt .
 
+RUN apt-get update && \
+    apt-get install --only-upgrade -y openssl libssl3t64 libpcre2-8-0 && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir --default-timeout=120 --retries 5 -r requirements.txt
 
 COPY . .
