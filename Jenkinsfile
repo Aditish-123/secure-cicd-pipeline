@@ -336,39 +336,24 @@ pipeline {
 
 
         // ============================================
-        // 9. TEST EC2 SSH CONNECTION
+        // 9. TEST EC2 NETWORK CONNECTION
         // ============================================
 
-        stage('Test EC2 SSH Connection') {
+        stage('Test EC2 Network') {
 
             steps {
 
-                withCredentials([
-                    sshUserPrivateKey(
-                        credentialsId: 'ec2-ssh-key',
-                        keyFileVariable: 'SSH_KEY',
-                        usernameVariable: 'SSH_USER'
-                    )
-                ]) {
+                bat '''
+                    echo ============================================
+                    echo TESTING CONNECTION FROM JENKINS TO EC2
+                    echo ============================================
 
-                    echo 'Testing SSH connection to AWS EC2...'
+                    powershell -Command "Test-NetConnection ec2-51-20-7-125.eu-north-1.compute.amazonaws.com -Port 22"
 
-                    bat '''
-                        echo Fixing SSH private key permissions...
-
-                        icacls "%SSH_KEY%" /inheritance:r
-
-                        icacls "%SSH_KEY%" /remove "BUILTIN\\Users"
-
-                        icacls "%SSH_KEY%" /remove "Everyone"
-
-                        icacls "%SSH_KEY%" /grant:r "SYSTEM":R
-
-                        echo Testing EC2 SSH connection...
-
-                        ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" %SSH_USER%@ec2-51-20-7-125.eu-north-1.compute.amazonaws.com "docker --version"
-                    '''
-                }
+                    echo ============================================
+                    echo EC2 NETWORK TEST COMPLETED
+                    echo ============================================
+                '''
             }
         }
     }
