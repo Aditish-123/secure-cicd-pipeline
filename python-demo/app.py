@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Secure CI/CD Demo Application is running - Automated Pipeline!!"
+    return "Secure CI/CD Demo Application is running - Automated Pipeline started!!!"
 
 @app.route("/health")
 def health():
