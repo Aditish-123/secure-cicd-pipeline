@@ -26,23 +26,17 @@ pipeline {
                     echo "Changed files:"
                     echo changedFiles
 
-                    if (
-                        changedFiles.contains('python-demo/')
-                    ) {
+                    if (changedFiles.contains('python-demo/')) {
 
                         env.DETECTED_LANGUAGE = 'python'
 
                     }
-                    else if (
-                        changedFiles.contains('node-demo/')
-                    ) {
+                    else if (changedFiles.contains('node-demo/')) {
 
                         env.DETECTED_LANGUAGE = 'node'
 
                     }
-                    else if (
-                        changedFiles.contains('java-demo/')
-                    ) {
+                    else if (changedFiles.contains('java-demo/')) {
 
                         env.DETECTED_LANGUAGE = 'java'
 
@@ -50,7 +44,6 @@ pipeline {
                     else {
 
                         env.DETECTED_LANGUAGE = 'none'
-
                     }
 
                     echo "Detected application: ${env.DETECTED_LANGUAGE}"
@@ -60,7 +53,7 @@ pipeline {
 
 
         // ============================================
-        // 2. CHECK MULTIPLE APPLICATIONS
+        // 2. VALIDATE APPLICATION SELECTION
         // ============================================
 
         stage('Validate Application Selection') {
@@ -73,7 +66,6 @@ pipeline {
 
                         echo "No application code changed."
                         echo "Application build stages will be skipped."
-
                     }
                 }
             }
@@ -369,6 +361,8 @@ pipeline {
                         icacls "%SSH_KEY%" /remove "BUILTIN\\Users"
 
                         icacls "%SSH_KEY%" /remove "Everyone"
+
+                        icacls "%SSH_KEY%" /grant:r "SYSTEM":R
 
                         echo Testing EC2 SSH connection...
 
