@@ -326,21 +326,21 @@ pipeline {
                     if (env.DETECTED_LANGUAGE == 'python') {
 
                         bat '''
-                            powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; if ($r.StatusCode -ne 200) { exit 1 }; Write-Host $r.Content } catch { exit 1 }"
+                            powershell -NoProfile -NonInteractive -Command "$r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; Write-Host 'HTTP Status:' $r.StatusCode; Write-Host 'Response:' $r.Content; if ($r.StatusCode -ne 200) { exit 1 }"
                         '''
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
                         bat '''
-                            powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:3000/health' -UseBasicParsing; if ($r.StatusCode -ne 200) { exit 1 }; Write-Host $r.Content } catch { exit 1 }"
+                            powershell -NoProfile -NonInteractive -Command "$r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:3000/health' -UseBasicParsing; Write-Host 'HTTP Status:' $r.StatusCode; Write-Host 'Response:' $r.Content; if ($r.StatusCode -ne 200) { exit 1 }"
                         '''
 
                     }
                     else if (env.DETECTED_LANGUAGE == 'java') {
 
                         bat '''
-                            powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:8081/health' -UseBasicParsing; if ($r.StatusCode -ne 200) { exit 1 }; Write-Host $r.Content } catch { exit 1 }"
+                            powershell -NoProfile -NonInteractive -Command "$r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:8081/health' -UseBasicParsing; Write-Host 'HTTP Status:' $r.StatusCode; Write-Host 'Response:' $r.Content; if ($r.StatusCode -ne 200) { exit 1 }"
                         '''
                     }
                 }
