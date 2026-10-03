@@ -11,6 +11,10 @@ const server = http.createServer((req, res) => {
     res.end("Node.js CI/CD Demo Application is running!");
 });
 
-server.listen(3000, "0.0.0.0", () => {
-    console.log("Server running on port 3000");
-});
+if (require.main === module) {
+    server.listen(3000, "0.0.0.0", () => {
+        console.log("Server running on port 3000");
+    });
+}
+
+module.exports = server;
