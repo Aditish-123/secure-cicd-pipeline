@@ -10,7 +10,7 @@ import java.net.InetSocketAddress;
 public class App {
 
     public static String getMessage() {
-        return "Java CI/CD Demo Application is running successfully! v2";
+        return "Java CI/CD Demo Application is running successfully! v3";
     }
 
     public static void main(String[] args) throws IOException {
