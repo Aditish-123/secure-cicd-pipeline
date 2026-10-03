@@ -8,7 +8,7 @@ const server = http.createServer((req, res) => {
     }
 
     res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Node.js CI/CD Demo Application is running!");
+    res.end("Node.js CI/CD Demo Application is running! Version 2");
 });
 
 if (require.main === module) {
