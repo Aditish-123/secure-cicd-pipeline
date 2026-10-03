@@ -20,16 +20,29 @@ pipeline {
         stage('Detect Application') {
             steps {
                 script {
-                    def changedFiles = bat(
-                        script: '''
-                            @echo off
-                            git diff --name-only HEAD~1 HEAD
-                        ''',
-                        returnStdout: true
-                    ).trim()
 
-                    echo "Changed files:"
+                    def changedFiles = ''
+
+                    try {
+                        changedFiles = bat(
+                            script: '''
+                                @echo off
+                                git diff --name-only HEAD~1 HEAD
+                            ''',
+                            returnStdout: true
+                        ).trim()
+                    } catch (Exception e) {
+                        echo 'Could not determine changed files from previous commit.'
+                    }
+
+                    echo 'Changed files:'
                     echo changedFiles
+
+                    /*
+                     * Primary detection:
+                     * Detect application from files changed
+                     * in the latest commit.
+                     */
 
                     if (changedFiles.contains('python-demo/')) {
 
@@ -68,8 +81,54 @@ pipeline {
 
                     } else {
 
-                        env.DETECTED_LANGUAGE = 'none'
-                        echo 'No application folder changed.'
+                        /*
+                         * Fallback detection:
+                         * If changed-file detection is empty,
+                         * detect the application from repository structure.
+                         */
+
+                        def nodeExists = fileExists('node-demo/package.json')
+                        def pythonExists = fileExists('python-demo/requirements.txt')
+                        def javaExists = fileExists('java-demo/pom.xml')
+
+                        if (nodeExists) {
+
+                            echo 'Changed-file detection was empty.'
+                            echo 'Node.js application detected from repository structure.'
+
+                            env.DETECTED_LANGUAGE = 'node'
+                            env.DOCKER_IMAGE = 'secure-cicd-node-app'
+                            env.DOCKER_REPO = 'aditi1166/secure-cicd-node-app'
+                            env.APP_PORT = '3000'
+                            env.CONTAINER_PORT = '3000'
+
+                        } else if (pythonExists) {
+
+                            echo 'Changed-file detection was empty.'
+                            echo 'Python application detected from repository structure.'
+
+                            env.DETECTED_LANGUAGE = 'python'
+                            env.DOCKER_IMAGE = 'secure-cicd-app'
+                            env.DOCKER_REPO = 'aditi1166/secure-cicd-app'
+                            env.APP_PORT = '5000'
+                            env.CONTAINER_PORT = '5000'
+
+                        } else if (javaExists) {
+
+                            echo 'Changed-file detection was empty.'
+                            echo 'Java application detected from repository structure.'
+
+                            env.DETECTED_LANGUAGE = 'java'
+                            env.DOCKER_IMAGE = 'secure-cicd-java-app'
+                            env.DOCKER_REPO = 'aditi1166/secure-cicd-java-app'
+                            env.APP_PORT = '8081'
+                            env.CONTAINER_PORT = '8080'
+
+                        } else {
+
+                            env.DETECTED_LANGUAGE = 'none'
+                            echo 'No supported application detected.'
+                        }
                     }
 
                     echo "Detected application: ${env.DETECTED_LANGUAGE}"
@@ -80,8 +139,9 @@ pipeline {
         stage('Validate') {
             steps {
                 script {
+
                     if (env.DETECTED_LANGUAGE == 'none') {
-                        error('No application changes detected.')
+                        error('No application changes or supported application detected.')
                     }
 
                     echo 'Application validation successful.'
@@ -240,7 +300,7 @@ pipeline {
                         bat '''
                             echo Logging in to Docker Hub...
 
-                            docker login -u "%DOCKER_USERNAME%" -p "%DOCKER_PASSWORD%"
+                            echo "%DOCKER_PASSWORD%" | docker login -u "%DOCKER_USERNAME%" --password-stdin
 
                             if errorlevel 1 exit /b %errorlevel%
 
@@ -264,7 +324,7 @@ pipeline {
                     ]) {
 
                         bat '''
-                            docker login -u "%DOCKER_USERNAME%" -p "%DOCKER_PASSWORD%"
+                            echo "%DOCKER_PASSWORD%" | docker login -u "%DOCKER_USERNAME%" --password-stdin
 
                             if errorlevel 1 exit /b %errorlevel%
 
@@ -331,9 +391,8 @@ pipeline {
                             .replace('"', '\\"')
 
                         /*
-                         * FIX:
-                         * AWS-RunShellScript expects "commands"
-                         * inside the "Parameters" object.
+                         * AWS-RunShellScript expects commands
+                         * inside the Parameters object.
                          */
                         writeFile(
                             file: 'ssm-commands.json',
