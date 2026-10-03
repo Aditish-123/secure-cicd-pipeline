@@ -23,9 +23,6 @@ pipeline {
 
     stages {
 
-        // ============================================================
-        // 1. DETECT APPLICATION
-        // ============================================================
         stage('Detect Application') {
             steps {
                 script {
@@ -42,48 +39,32 @@ pipeline {
                     echo changedFiles
 
                     if (changedFiles.contains('node-demo/')) {
-
                         env.APP_TYPE = 'node'
                         echo "Node.js application detected."
 
                     } else if (changedFiles.contains('java-demo/')) {
-
                         env.APP_TYPE = 'java'
                         echo "Java application detected."
 
                     } else if (changedFiles.contains('python-demo/')) {
-
                         env.APP_TYPE = 'python'
                         echo "Python application detected."
 
                     } else if (changedFiles == 'Jenkinsfile') {
-
-                        // Jenkinsfile-only changes use Python
-                        // for pipeline validation.
                         env.APP_TYPE = 'python'
-
                         echo "Only Jenkinsfile changed."
                         echo "Using Python application for pipeline validation."
 
                     } else {
 
-                        // Fallback
                         if (fileExists('node-demo/package.json')) {
-
                             env.APP_TYPE = 'node'
-
                         } else if (fileExists('python-demo/requirements.txt')) {
-
                             env.APP_TYPE = 'python'
-
                         } else if (fileExists('java-demo/pom.xml')) {
-
                             env.APP_TYPE = 'java'
-
                         } else {
-
                             error "Unable to detect supported application."
-
                         }
                     }
 
@@ -92,10 +73,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 2. VALIDATE
-        // ============================================================
         stage('Validate') {
             steps {
                 script {
@@ -119,9 +96,7 @@ pipeline {
                         }
 
                     } else {
-
                         error "Unsupported application type."
-
                     }
 
                     echo "Application validation successful."
@@ -129,10 +104,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 3. INSTALL DEPENDENCIES
-        // ============================================================
         stage('Install Dependencies') {
             steps {
                 script {
@@ -162,10 +133,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 4. TEST
-        // ============================================================
         stage('Test') {
             steps {
                 script {
@@ -195,10 +162,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 5. BUILD APPLICATION
-        // ============================================================
         stage('Build Application') {
             steps {
                 script {
@@ -222,10 +185,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 6. DOCKER BUILD
-        // ============================================================
         stage('Docker Build') {
             steps {
                 script {
@@ -255,10 +214,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 7. SECURITY GATE
-        // ============================================================
         stage('Security Gate') {
             steps {
                 script {
@@ -285,10 +240,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 8. DOCKER HUB LOGIN
-        // ============================================================
         stage('Docker Hub Login') {
             steps {
                 script {
@@ -302,11 +253,13 @@ pipeline {
                     ]) {
 
                         powershell '''
+                            $username = $env:DOCKER_USERNAME.Trim()
+                            $password = $env:DOCKER_PASSWORD.Trim()
+
                             Write-Host "Logging in to Docker Hub..."
 
-                            $env:DOCKER_PASSWORD |
-                                docker login `
-                                --username $env:DOCKER_USERNAME `
+                            $password | docker login `
+                                --username $username `
                                 --password-stdin
 
                             if ($LASTEXITCODE -ne 0) {
@@ -321,10 +274,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 9. DOCKER PUSH
-        // ============================================================
         stage('Docker Push') {
             steps {
                 script {
@@ -351,10 +300,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 10. AWS SSM CONNECTION TEST
-        // ============================================================
         stage('SSM Connection Test') {
             steps {
                 script {
@@ -380,10 +325,6 @@ pipeline {
             }
         }
 
-
-        // ============================================================
-        // 11. DEPLOY TO EC2 USING SSM
-        // ============================================================
         stage('Deploy to EC2 via SSM') {
             steps {
                 script {
@@ -400,11 +341,9 @@ pipeline {
                         imageName = env.JAVA_IMAGE
                     }
 
-
                     def containerName = "${env.APP_TYPE}-secure-cicd-app"
 
                     def hostPort = ''
-
                     def containerPort = ''
 
                     if (env.APP_TYPE == 'python') {
@@ -423,7 +362,6 @@ pipeline {
                         containerPort = '8080'
                     }
 
-
                     def commands = """
 docker pull ${imageName}
 docker stop ${containerName} || true
@@ -438,12 +376,10 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
                         .replace('\r\n', '\\n')
                         .replace('\n', '\\n')
 
-
                     writeFile(
                         file: 'ssm-commands.json',
                         text: '{"Parameters":{"commands":["' + escapedCommands + '"]}}'
                     )
-
 
                     withCredentials([
                         usernamePassword(
@@ -465,10 +401,6 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
             }
         }
 
-
-        // ============================================================
-        // 12. HEALTH CHECK
-        // ============================================================
         stage('Health Check') {
             steps {
                 script {
@@ -488,10 +420,8 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
                         healthUrl = "http://${EC2_HOST}:8081/health"
                     }
 
-
                     echo "Checking application health..."
                     echo "Health URL: ${healthUrl}"
-
 
                     bat """
                     powershell -Command ^
@@ -505,10 +435,6 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
         }
     }
 
-
-    // ================================================================
-    // POST ACTIONS
-    // ================================================================
     post {
 
         success {
