@@ -330,10 +330,21 @@ pipeline {
                             .replace('\\', '\\\\')
                             .replace('"', '\\"')
 
+                        /*
+                         * FIX:
+                         * AWS-RunShellScript expects "commands"
+                         * inside the "Parameters" object.
+                         */
                         writeFile(
                             file: 'ssm-commands.json',
-                            text: '{"commands":["' + escapedCommands + '"]}'
+                            text: '{"Parameters":{"commands":["' + escapedCommands + '"]}}'
                         )
+
+                        echo 'SSM deployment command prepared.'
+                        echo "Deploying image: ${imageRepo}:latest"
+                        echo "Container: ${containerName}"
+                        echo "Host port: ${hostPort}"
+                        echo "Container port: ${containerPort}"
 
                         bat """
                             "%AWS_CLI%" ssm send-command ^
