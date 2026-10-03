@@ -8,284 +8,288 @@ pipeline {
 
     environment {
         DOCKER_USER = 'aditi1166'
+
         AWS_DEFAULT_REGION = 'eu-north-1'
         EC2_INSTANCE_ID = 'i-0f484796d1bab5c3f'
         EC2_HOST = 'ec2-51-20-7-125.eu-north-1.compute.amazonaws.com'
+
         PYTHON_EXE = 'C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe'
         AWS_CLI = 'C:/Program Files/Amazon/AWSCLIV2/aws.exe'
+
+        PYTHON_IMAGE = 'aditi1166/secure-cicd-app:latest'
+        NODE_IMAGE = 'aditi1166/secure-cicd-node-app:latest'
+        JAVA_IMAGE = 'aditi1166/secure-cicd-java-app:latest'
     }
 
     stages {
 
+        // ============================================================
+        // 1. DETECT APPLICATION
+        // ============================================================
         stage('Detect Application') {
             steps {
                 script {
 
-                    def changedFiles = ''
+                    def changedFiles = bat(
+                        script: '''
+                        @echo off
+                        git diff --name-only HEAD~1 HEAD
+                        ''',
+                        returnStdout: true
+                    ).trim()
 
-                    try {
-                        changedFiles = bat(
-                            script: '''
-                                @echo off
-                                git diff --name-only HEAD~1 HEAD
-                            ''',
-                            returnStdout: true
-                        ).trim()
-                    } catch (Exception e) {
-                        echo 'Could not determine changed files from previous commit.'
-                    }
-
-                    echo 'Changed files:'
+                    echo "Changed files:"
                     echo changedFiles
 
-                    /*
-                     * Primary detection:
-                     * Detect application from files changed
-                     * in the latest commit.
-                     */
+                    if (changedFiles.contains('node-demo/')) {
 
-                    if (changedFiles.contains('python-demo/')) {
-
-                        env.DETECTED_LANGUAGE = 'python'
-                        env.DOCKER_IMAGE = 'secure-cicd-app'
-                        env.DOCKER_REPO = 'aditi1166/secure-cicd-app'
-                        env.APP_PORT = '5000'
-                        env.CONTAINER_PORT = '5000'
-
-                    } else if (changedFiles.contains('node-demo/')) {
-
-                        env.DETECTED_LANGUAGE = 'node'
-                        env.DOCKER_IMAGE = 'secure-cicd-node-app'
-                        env.DOCKER_REPO = 'aditi1166/secure-cicd-node-app'
-                        env.APP_PORT = '3000'
-                        env.CONTAINER_PORT = '3000'
+                        env.APP_TYPE = 'node'
+                        echo "Node.js application detected."
 
                     } else if (changedFiles.contains('java-demo/')) {
 
-                        env.DETECTED_LANGUAGE = 'java'
-                        env.DOCKER_IMAGE = 'secure-cicd-java-app'
-                        env.DOCKER_REPO = 'aditi1166/secure-cicd-java-app'
-                        env.APP_PORT = '8081'
-                        env.CONTAINER_PORT = '8080'
+                        env.APP_TYPE = 'java'
+                        echo "Java application detected."
 
-                    } else if (changedFiles.contains('Jenkinsfile')) {
+                    } else if (changedFiles.contains('python-demo/')) {
 
-                        echo 'Only Jenkinsfile changed.'
-                        echo 'Using Python application for pipeline validation.'
+                        env.APP_TYPE = 'python'
+                        echo "Python application detected."
 
-                        env.DETECTED_LANGUAGE = 'python'
-                        env.DOCKER_IMAGE = 'secure-cicd-app'
-                        env.DOCKER_REPO = 'aditi1166/secure-cicd-app'
-                        env.APP_PORT = '5000'
-                        env.CONTAINER_PORT = '5000'
+                    } else if (changedFiles == 'Jenkinsfile') {
+
+                        // Jenkinsfile-only changes use Python
+                        // for pipeline validation.
+                        env.APP_TYPE = 'python'
+
+                        echo "Only Jenkinsfile changed."
+                        echo "Using Python application for pipeline validation."
 
                     } else {
 
-                        /*
-                         * Fallback detection:
-                         * If changed-file detection is empty,
-                         * detect the application from repository structure.
-                         */
+                        // Fallback
+                        if (fileExists('node-demo/package.json')) {
 
-                        def nodeExists = fileExists('node-demo/package.json')
-                        def pythonExists = fileExists('python-demo/requirements.txt')
-                        def javaExists = fileExists('java-demo/pom.xml')
+                            env.APP_TYPE = 'node'
 
-                        if (nodeExists) {
+                        } else if (fileExists('python-demo/requirements.txt')) {
 
-                            echo 'Changed-file detection was empty.'
-                            echo 'Node.js application detected from repository structure.'
+                            env.APP_TYPE = 'python'
 
-                            env.DETECTED_LANGUAGE = 'node'
-                            env.DOCKER_IMAGE = 'secure-cicd-node-app'
-                            env.DOCKER_REPO = 'aditi1166/secure-cicd-node-app'
-                            env.APP_PORT = '3000'
-                            env.CONTAINER_PORT = '3000'
+                        } else if (fileExists('java-demo/pom.xml')) {
 
-                        } else if (pythonExists) {
-
-                            echo 'Changed-file detection was empty.'
-                            echo 'Python application detected from repository structure.'
-
-                            env.DETECTED_LANGUAGE = 'python'
-                            env.DOCKER_IMAGE = 'secure-cicd-app'
-                            env.DOCKER_REPO = 'aditi1166/secure-cicd-app'
-                            env.APP_PORT = '5000'
-                            env.CONTAINER_PORT = '5000'
-
-                        } else if (javaExists) {
-
-                            echo 'Changed-file detection was empty.'
-                            echo 'Java application detected from repository structure.'
-
-                            env.DETECTED_LANGUAGE = 'java'
-                            env.DOCKER_IMAGE = 'secure-cicd-java-app'
-                            env.DOCKER_REPO = 'aditi1166/secure-cicd-java-app'
-                            env.APP_PORT = '8081'
-                            env.CONTAINER_PORT = '8080'
+                            env.APP_TYPE = 'java'
 
                         } else {
 
-                            env.DETECTED_LANGUAGE = 'none'
-                            echo 'No supported application detected.'
+                            error "Unable to detect supported application."
+
                         }
                     }
 
-                    echo "Detected application: ${env.DETECTED_LANGUAGE}"
+                    echo "Detected application: ${env.APP_TYPE}"
                 }
             }
         }
 
+
+        // ============================================================
+        // 2. VALIDATE
+        // ============================================================
         stage('Validate') {
             steps {
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'none') {
-                        error('No application changes or supported application detected.')
+                    if (env.APP_TYPE == 'python') {
+
+                        if (!fileExists('python-demo/requirements.txt')) {
+                            error "Python requirements.txt not found."
+                        }
+
+                    } else if (env.APP_TYPE == 'node') {
+
+                        if (!fileExists('node-demo/package.json')) {
+                            error "Node.js package.json not found."
+                        }
+
+                    } else if (env.APP_TYPE == 'java') {
+
+                        if (!fileExists('java-demo/pom.xml')) {
+                            error "Java pom.xml not found."
+                        }
+
+                    } else {
+
+                        error "Unsupported application type."
+
                     }
 
-                    echo 'Application validation successful.'
+                    echo "Application validation successful."
                 }
             }
         }
 
+
+        // ============================================================
+        // 3. INSTALL DEPENDENCIES
+        // ============================================================
         stage('Install Dependencies') {
             steps {
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'python') {
+                    if (env.APP_TYPE == 'python') {
 
-                        bat '''
-                            cd python-demo
-                            "C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pip install -r requirements.txt
-                        '''
+                        bat """
+                        cd python-demo
+                        "${PYTHON_EXE}" -m pip install -r requirements.txt
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'node') {
+                    } else if (env.APP_TYPE == 'node') {
 
-                        bat '''
-                            cd node-demo
-                            npm install
-                        '''
+                        bat """
+                        cd node-demo
+                        npm install
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'java') {
+                    } else if (env.APP_TYPE == 'java') {
 
-                        bat '''
-                            cd java-demo
-                            mvn clean compile
-                        '''
+                        bat """
+                        cd java-demo
+                        mvn clean compile
+                        """
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 4. TEST
+        // ============================================================
         stage('Test') {
             steps {
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'python') {
+                    if (env.APP_TYPE == 'python') {
 
-                        bat '''
-                            cd python-demo
-                            "C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe" -m pytest
-                        '''
+                        bat """
+                        cd python-demo
+                        "${PYTHON_EXE}" -m pytest
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'node') {
+                    } else if (env.APP_TYPE == 'node') {
 
-                        bat '''
-                            cd node-demo
-                            npm test
-                        '''
+                        bat """
+                        cd node-demo
+                        npm test
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'java') {
+                    } else if (env.APP_TYPE == 'java') {
 
-                        bat '''
-                            cd java-demo
-                            mvn test
-                        '''
+                        bat """
+                        cd java-demo
+                        mvn test
+                        """
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 5. BUILD APPLICATION
+        // ============================================================
         stage('Build Application') {
             steps {
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'python') {
+                    if (env.APP_TYPE == 'python') {
 
-                        echo 'Python application does not require a separate compilation step.'
+                        echo "Python application does not require a separate compilation step."
 
-                    } else if (env.DETECTED_LANGUAGE == 'node') {
+                    } else if (env.APP_TYPE == 'node') {
 
-                        echo 'Node.js application build completed.'
+                        echo "Node.js application does not require a separate compilation step."
 
-                    } else if (env.DETECTED_LANGUAGE == 'java') {
+                    } else if (env.APP_TYPE == 'java') {
 
-                        bat '''
-                            cd java-demo
-                            mvn clean package -DskipTests
-                        '''
+                        bat """
+                        cd java-demo
+                        mvn clean package -DskipTests
+                        """
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 6. DOCKER BUILD
+        // ============================================================
         stage('Docker Build') {
             steps {
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'python') {
+                    if (env.APP_TYPE == 'python') {
 
-                        bat '''
-                            cd python-demo
-                            docker build -t %DOCKER_USER%/secure-cicd-app:latest .
-                        '''
+                        bat """
+                        cd python-demo
+                        docker build -t ${PYTHON_IMAGE} .
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'node') {
+                    } else if (env.APP_TYPE == 'node') {
 
-                        bat '''
-                            cd node-demo
-                            docker build -t %DOCKER_USER%/secure-cicd-node-app:latest .
-                        '''
+                        bat """
+                        cd node-demo
+                        docker build -t ${NODE_IMAGE} .
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'java') {
+                    } else if (env.APP_TYPE == 'java') {
 
-                        bat '''
-                            cd java-demo
-                            docker build -t %DOCKER_USER%/secure-cicd-java-app:latest .
-                        '''
+                        bat """
+                        cd java-demo
+                        docker build -t ${JAVA_IMAGE} .
+                        """
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 7. SECURITY GATE
+        // ============================================================
         stage('Security Gate') {
             steps {
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'python') {
+                    if (env.APP_TYPE == 'python') {
 
-                        bat '''
-                            powershell -ExecutionPolicy Bypass -File security-gate.ps1 aditi1166/secure-cicd-app:latest
-                        '''
+                        bat """
+                        powershell -ExecutionPolicy Bypass -File security-gate.ps1 ${PYTHON_IMAGE}
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'node') {
+                    } else if (env.APP_TYPE == 'node') {
 
-                        bat '''
-                            powershell -ExecutionPolicy Bypass -File security-gate.ps1 aditi1166/secure-cicd-node-app:latest
-                        '''
+                        bat """
+                        powershell -ExecutionPolicy Bypass -File security-gate.ps1 ${NODE_IMAGE}
+                        """
 
-                    } else if (env.DETECTED_LANGUAGE == 'java') {
+                    } else if (env.APP_TYPE == 'java') {
 
-                        bat '''
-                            powershell -ExecutionPolicy Bypass -File security-gate.ps1 aditi1166/secure-cicd-java-app:latest
-                        '''
+                        bat """
+                        powershell -ExecutionPolicy Bypass -File security-gate.ps1 ${JAVA_IMAGE}
+                        """
                     }
                 }
             }
         }
 
-        stage('Docker Hub Login Test') {
+
+        // ============================================================
+        // 8. DOCKER HUB LOGIN
+        // ============================================================
+        stage('Docker Hub Login') {
             steps {
                 script {
 
@@ -297,256 +301,262 @@ pipeline {
                         )
                     ]) {
 
-                        bat '''
-                            echo Logging in to Docker Hub...
+                        powershell '''
+                            Write-Host "Logging in to Docker Hub..."
 
-                            echo "%DOCKER_PASSWORD%" | docker login -u "%DOCKER_USERNAME%" --password-stdin
+                            $env:DOCKER_PASSWORD |
+                                docker login `
+                                --username $env:DOCKER_USERNAME `
+                                --password-stdin
 
-                            if errorlevel 1 exit /b %errorlevel%
+                            if ($LASTEXITCODE -ne 0) {
+                                Write-Error "Docker Hub authentication failed."
+                                exit 1
+                            }
 
-                            echo Docker Hub login successful.
+                            Write-Host "Docker Hub login successful."
                         '''
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 9. DOCKER PUSH
+        // ============================================================
         stage('Docker Push') {
             steps {
                 script {
 
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'dockerhub-credentials',
-                            usernameVariable: 'DOCKER_USERNAME',
-                            passwordVariable: 'DOCKER_PASSWORD'
-                        )
-                    ]) {
+                    if (env.APP_TYPE == 'python') {
 
-                        bat '''
-                            echo "%DOCKER_PASSWORD%" | docker login -u "%DOCKER_USERNAME%" --password-stdin
+                        bat """
+                        docker push ${PYTHON_IMAGE}
+                        """
 
-                            if errorlevel 1 exit /b %errorlevel%
+                    } else if (env.APP_TYPE == 'node') {
 
-                            if "%DETECTED_LANGUAGE%"=="python" docker push aditi1166/secure-cicd-app:latest
+                        bat """
+                        docker push ${NODE_IMAGE}
+                        """
 
-                            if "%DETECTED_LANGUAGE%"=="node" docker push aditi1166/secure-cicd-node-app:latest
+                    } else if (env.APP_TYPE == 'java') {
 
-                            if "%DETECTED_LANGUAGE%"=="java" docker push aditi1166/secure-cicd-java-app:latest
-
-                            if errorlevel 1 exit /b %errorlevel%
-
-                            echo Docker image pushed successfully.
-                        '''
+                        bat """
+                        docker push ${JAVA_IMAGE}
+                        """
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 10. AWS SSM CONNECTION TEST
+        // ============================================================
         stage('SSM Connection Test') {
             steps {
                 script {
 
                     withCredentials([
-                        [$class: 'AmazonWebServicesCredentialsBinding',
-                         credentialsId: 'aws-ssm-credentials']
+                        usernamePassword(
+                            credentialsId: 'aws-ssm-credentials',
+                            usernameVariable: 'AWS_ACCESS_KEY_ID',
+                            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                        )
                     ]) {
 
-                        bat '''
-                            echo ============================================
-                            echo Checking AWS SSM Connection
-                            echo ============================================
+                        bat """
+                        "${AWS_CLI}" sts get-caller-identity
+                        """
 
-                            "%AWS_CLI%" ssm describe-instance-information ^
-                                --filters "Key=InstanceIds,Values=%EC2_INSTANCE_ID%" ^
-                                --region %AWS_DEFAULT_REGION%
-
-                            if errorlevel 1 exit /b %errorlevel%
-
-                            echo AWS SSM connection successful.
-                        '''
+                        bat """
+                        "${AWS_CLI}" ssm describe-instance-information ^
+                            --region ${AWS_DEFAULT_REGION}
+                        """
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 11. DEPLOY TO EC2 USING SSM
+        // ============================================================
         stage('Deploy to EC2 via SSM') {
             steps {
                 script {
 
+                    def imageName = ''
+
+                    if (env.APP_TYPE == 'python') {
+                        imageName = env.PYTHON_IMAGE
+
+                    } else if (env.APP_TYPE == 'node') {
+                        imageName = env.NODE_IMAGE
+
+                    } else if (env.APP_TYPE == 'java') {
+                        imageName = env.JAVA_IMAGE
+                    }
+
+
+                    def containerName = "${env.APP_TYPE}-secure-cicd-app"
+
+                    def hostPort = ''
+
+                    def containerPort = ''
+
+                    if (env.APP_TYPE == 'python') {
+
+                        hostPort = '5000'
+                        containerPort = '5000'
+
+                    } else if (env.APP_TYPE == 'node') {
+
+                        hostPort = '3000'
+                        containerPort = '3000'
+
+                    } else if (env.APP_TYPE == 'java') {
+
+                        hostPort = '8081'
+                        containerPort = '8080'
+                    }
+
+
+                    def commands = """
+docker pull ${imageName}
+docker stop ${containerName} || true
+docker rm ${containerName} || true
+docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageName}
+"""
+
+                    def escapedCommands = commands
+                        .trim()
+                        .replace('\\', '\\\\')
+                        .replace('"', '\\"')
+                        .replace('\r\n', '\\n')
+                        .replace('\n', '\\n')
+
+
+                    writeFile(
+                        file: 'ssm-commands.json',
+                        text: '{"Parameters":{"commands":["' + escapedCommands + '"]}}'
+                    )
+
+
                     withCredentials([
-                        [$class: 'AmazonWebServicesCredentialsBinding',
-                         credentialsId: 'aws-ssm-credentials']
+                        usernamePassword(
+                            credentialsId: 'aws-ssm-credentials',
+                            usernameVariable: 'AWS_ACCESS_KEY_ID',
+                            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                        )
                     ]) {
 
-                        def imageRepo = env.DOCKER_REPO
-                        def containerName = env.DOCKER_IMAGE
-                        def hostPort = env.APP_PORT
-                        def containerPort = env.CONTAINER_PORT
-
-                        def commands = "docker pull ${imageRepo}:latest; docker rm -f ${containerName} 2>/dev/null || true; docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageRepo}:latest"
-
-                        def escapedCommands = commands
-                            .replace('\\', '\\\\')
-                            .replace('"', '\\"')
-
-                        /*
-                         * AWS-RunShellScript expects commands
-                         * inside the Parameters object.
-                         */
-                        writeFile(
-                            file: 'ssm-commands.json',
-                            text: '{"Parameters":{"commands":["' + escapedCommands + '"]}}'
-                        )
-
-                        echo 'SSM deployment command prepared.'
-                        echo "Deploying image: ${imageRepo}:latest"
-                        echo "Container: ${containerName}"
-                        echo "Host port: ${hostPort}"
-                        echo "Container port: ${containerPort}"
-
                         bat """
-                            "%AWS_CLI%" ssm send-command ^
-                                --instance-ids ${env.EC2_INSTANCE_ID} ^
-                                --document-name AWS-RunShellScript ^
-                                --cli-input-json file://ssm-commands.json ^
-                                --region ${env.AWS_DEFAULT_REGION} ^
-                                --output text ^
-                                --query Command.CommandId > deploy-command-id.txt
-
-                            if errorlevel 1 exit /b %errorlevel%
+                        "${AWS_CLI}" ssm send-command ^
+                            --instance-ids ${EC2_INSTANCE_ID} ^
+                            --document-name "AWS-RunShellScript" ^
+                            --parameters file://ssm-commands.json ^
+                            --region ${AWS_DEFAULT_REGION}
                         """
-
-                        def deployId = readFile(
-                            'deploy-command-id.txt'
-                        ).trim()
-
-                        echo "Deployment command ID: ${deployId}"
-
-                        def deployStatus = 'Pending'
-
-                        for (int i = 0; i < 30; i++) {
-
-                            bat """
-                                "%AWS_CLI%" ssm get-command-invocation ^
-                                    --command-id ${deployId} ^
-                                    --instance-id ${env.EC2_INSTANCE_ID} ^
-                                    --region ${env.AWS_DEFAULT_REGION} ^
-                                    --query Status ^
-                                    --output text > deploy-status.txt
-                            """
-
-                            deployStatus = readFile(
-                                'deploy-status.txt'
-                            ).trim()
-
-                            echo "Deployment status: ${deployStatus}"
-
-                            if (
-                                deployStatus == 'Success' ||
-                                deployStatus == 'Failed' ||
-                                deployStatus == 'Cancelled' ||
-                                deployStatus == 'TimedOut'
-                            ) {
-                                break
-                            }
-
-                            sleep time: 5, unit: 'SECONDS'
-                        }
-
-                        bat """
-                            echo ============================================
-                            echo EC2 Deployment Output
-                            echo ============================================
-
-                            "%AWS_CLI%" ssm get-command-invocation ^
-                                --command-id ${deployId} ^
-                                --instance-id ${env.EC2_INSTANCE_ID} ^
-                                --region ${env.AWS_DEFAULT_REGION} ^
-                                --query StandardOutputContent ^
-                                --output text
-
-                            echo ============================================
-                            echo EC2 Deployment Errors
-                            echo ============================================
-
-                            "%AWS_CLI%" ssm get-command-invocation ^
-                                --command-id ${deployId} ^
-                                --instance-id ${env.EC2_INSTANCE_ID} ^
-                                --region ${env.AWS_DEFAULT_REGION} ^
-                                --query StandardErrorContent ^
-                                --output text
-                        """
-
-                        if (deployStatus != 'Success') {
-
-                            error(
-                                "EC2 deployment failed. SSM status: ${deployStatus}"
-                            )
-                        }
-
-                        echo 'EC2 deployment completed successfully.'
                     }
                 }
             }
         }
 
+
+        // ============================================================
+        // 12. HEALTH CHECK
+        // ============================================================
         stage('Health Check') {
             steps {
                 script {
 
-                    if (env.DETECTED_LANGUAGE == 'python') {
+                    def healthUrl = ''
 
-                        bat '''
-                            powershell -Command "try { $r=Invoke-WebRequest -Uri 'http://%EC2_HOST%:5000/health' -UseBasicParsing; Write-Host $r.Content; if($r.StatusCode -ne 200){exit 1} } catch { Write-Host $_; exit 1 }"
-                        '''
+                    if (env.APP_TYPE == 'python') {
 
-                    } else if (env.DETECTED_LANGUAGE == 'node') {
+                        healthUrl = "http://${EC2_HOST}:5000/health"
 
-                        bat '''
-                            powershell -Command "try { $r=Invoke-WebRequest -Uri 'http://%EC2_HOST%:3000/health' -UseBasicParsing; Write-Host $r.Content; if($r.StatusCode -ne 200){exit 1} } catch { Write-Host $_; exit 1 }"
-                        '''
+                    } else if (env.APP_TYPE == 'node') {
 
-                    } else if (env.DETECTED_LANGUAGE == 'java') {
+                        healthUrl = "http://${EC2_HOST}:3000/health"
 
-                        bat '''
-                            powershell -Command "try { $r=Invoke-WebRequest -Uri 'http://%EC2_HOST%:8081/health' -UseBasicParsing; Write-Host $r.Content; if($r.StatusCode -ne 200){exit 1} } catch { Write-Host $_; exit 1 }"
-                        '''
+                    } else if (env.APP_TYPE == 'java') {
+
+                        healthUrl = "http://${EC2_HOST}:8081/health"
                     }
 
-                    echo 'Health check completed successfully.'
+
+                    echo "Checking application health..."
+                    echo "Health URL: ${healthUrl}"
+
+
+                    bat """
+                    powershell -Command ^
+                    "\$response = Invoke-WebRequest -Uri '${healthUrl}' -UseBasicParsing; ^
+                    Write-Host 'HTTP Status:' \$response.StatusCode; ^
+                    Write-Host 'Response:' \$response.Content; ^
+                    if (\$response.StatusCode -ne 200) { exit 1 }"
+                    """
                 }
             }
         }
     }
 
+
+    // ================================================================
+    // POST ACTIONS
+    // ================================================================
     post {
 
         success {
-
-            echo '''
+            echo """
 ============================================
 CI/CD PIPELINE SUCCESSFUL
 ============================================
-Application deployed successfully.
-Security gate passed.
-Docker image pushed.
-EC2 deployment completed.
-Health check passed.
+Application: ${env.APP_TYPE}
+
+Pipeline completed:
+GitHub
+   ↓
+Application Detection
+   ↓
+Dependencies
+   ↓
+Tests
+   ↓
+Application Build
+   ↓
+Docker Build
+   ↓
+Trivy Security Gate
+   ↓
+Docker Hub
+   ↓
+AWS SSM
+   ↓
+EC2 Deployment
+   ↓
+Health Check
 ============================================
-'''
+"""
         }
 
         failure {
-
             echo """
 ============================================
 CI/CD PIPELINE FAILED
 ============================================
-Application: ${DETECTED_LANGUAGE}
+Application: ${env.APP_TYPE}
 Please check the failed stage in Jenkins.
 ============================================
 """
+        }
+
+        always {
+            echo "Pipeline execution completed."
         }
     }
 }
