@@ -127,7 +127,7 @@ pipeline {
 
                         bat '''
                             cd python-demo
-                            python -m pip install -r requirements.txt
+                            "C:\Users\DELL\AppData\Local\Programs\Python\Python314\python.exe" -m pip install -r requirements.txt
                         '''
                     }
 
