@@ -12,6 +12,7 @@ pipeline {
         EC2_INSTANCE_ID = 'i-0f484796d1bab5c3f'
         EC2_HOST = 'ec2-51-20-7-125.eu-north-1.compute.amazonaws.com'
         PYTHON_EXE = 'C:/Users/DELL/AppData/Local/Programs/Python/Python314/python.exe'
+        AWS_CLI = 'C:/Program Files/Amazon/AWSCLIV2/aws.exe'
     }
 
     stages {
@@ -31,6 +32,7 @@ pipeline {
                     echo changedFiles
 
                     if (changedFiles.contains('python-demo/')) {
+
                         env.DETECTED_LANGUAGE = 'python'
                         env.DOCKER_IMAGE = 'secure-cicd-app'
                         env.DOCKER_REPO = 'aditi1166/secure-cicd-app'
@@ -38,6 +40,7 @@ pipeline {
                         env.CONTAINER_PORT = '5000'
 
                     } else if (changedFiles.contains('node-demo/')) {
+
                         env.DETECTED_LANGUAGE = 'node'
                         env.DOCKER_IMAGE = 'secure-cicd-node-app'
                         env.DOCKER_REPO = 'aditi1166/secure-cicd-node-app'
@@ -45,6 +48,7 @@ pipeline {
                         env.CONTAINER_PORT = '3000'
 
                     } else if (changedFiles.contains('java-demo/')) {
+
                         env.DETECTED_LANGUAGE = 'java'
                         env.DOCKER_IMAGE = 'secure-cicd-java-app'
                         env.DOCKER_REPO = 'aditi1166/secure-cicd-java-app'
@@ -52,6 +56,7 @@ pipeline {
                         env.CONTAINER_PORT = '8080'
 
                     } else if (changedFiles.contains('Jenkinsfile')) {
+
                         echo 'Only Jenkinsfile changed.'
                         echo 'Using Python application for pipeline validation.'
 
@@ -62,6 +67,7 @@ pipeline {
                         env.CONTAINER_PORT = '5000'
 
                     } else {
+
                         env.DETECTED_LANGUAGE = 'none'
                         echo 'No application folder changed.'
                     }
@@ -199,15 +205,21 @@ pipeline {
 
                     if (env.DETECTED_LANGUAGE == 'python') {
 
-                        bat 'powershell -ExecutionPolicy Bypass -File security-gate.ps1 %DOCKER_USER%/secure-cicd-app:latest'
+                        bat '''
+                            powershell -ExecutionPolicy Bypass -File security-gate.ps1 aditi1166/secure-cicd-app:latest
+                        '''
 
                     } else if (env.DETECTED_LANGUAGE == 'node') {
 
-                        bat 'powershell -ExecutionPolicy Bypass -File security-gate.ps1 %DOCKER_USER%/secure-cicd-node-app:latest'
+                        bat '''
+                            powershell -ExecutionPolicy Bypass -File security-gate.ps1 aditi1166/secure-cicd-node-app:latest
+                        '''
 
                     } else if (env.DETECTED_LANGUAGE == 'java') {
 
-                        bat 'powershell -ExecutionPolicy Bypass -File security-gate.ps1 %DOCKER_USER%/secure-cicd-java-app:latest'
+                        bat '''
+                            powershell -ExecutionPolicy Bypass -File security-gate.ps1 aditi1166/secure-cicd-java-app:latest
+                        '''
                     }
                 }
             }
@@ -285,7 +297,7 @@ pipeline {
                             echo Checking AWS SSM Connection
                             echo ============================================
 
-                            aws ssm describe-instance-information ^
+                            "%AWS_CLI%" ssm describe-instance-information ^
                                 --filters "Key=InstanceIds,Values=%EC2_INSTANCE_ID%" ^
                                 --region %AWS_DEFAULT_REGION%
 
@@ -324,7 +336,7 @@ pipeline {
                         )
 
                         bat """
-                            aws ssm send-command ^
+                            "%AWS_CLI%" ssm send-command ^
                                 --instance-ids ${env.EC2_INSTANCE_ID} ^
                                 --document-name AWS-RunShellScript ^
                                 --cli-input-json file://ssm-commands.json ^
@@ -346,7 +358,7 @@ pipeline {
                         for (int i = 0; i < 30; i++) {
 
                             bat """
-                                aws ssm get-command-invocation ^
+                                "%AWS_CLI%" ssm get-command-invocation ^
                                     --command-id ${deployId} ^
                                     --instance-id ${env.EC2_INSTANCE_ID} ^
                                     --region ${env.AWS_DEFAULT_REGION} ^
@@ -377,7 +389,7 @@ pipeline {
                             echo EC2 Deployment Output
                             echo ============================================
 
-                            aws ssm get-command-invocation ^
+                            "%AWS_CLI%" ssm get-command-invocation ^
                                 --command-id ${deployId} ^
                                 --instance-id ${env.EC2_INSTANCE_ID} ^
                                 --region ${env.AWS_DEFAULT_REGION} ^
@@ -388,7 +400,7 @@ pipeline {
                             echo EC2 Deployment Errors
                             echo ============================================
 
-                            aws ssm get-command-invocation ^
+                            "%AWS_CLI%" ssm get-command-invocation ^
                                 --command-id ${deployId} ^
                                 --instance-id ${env.EC2_INSTANCE_ID} ^
                                 --region ${env.AWS_DEFAULT_REGION} ^
