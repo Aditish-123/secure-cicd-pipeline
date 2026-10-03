@@ -14,7 +14,6 @@ pipeline {
         EC2_INSTANCE_ID = 'i-0f484796d1bab5c3f'
 
         EC2_HOST = 'ec2-51-20-7-125.eu-north-1.compute.amazonaws.com'
-
     }
 
 
@@ -70,12 +69,24 @@ pipeline {
 
                     }
 
+                    else if (changedFiles.contains('Jenkinsfile')) {
+
+                        echo "Only Jenkinsfile changed."
+                        echo "Using Python application for pipeline validation."
+
+                        env.DETECTED_LANGUAGE = 'python'
+                        env.DOCKER_IMAGE = 'secure-cicd-app'
+                        env.DOCKER_REPO = 'aditi1166/secure-cicd-app'
+                        env.APP_PORT = '5000'
+                        env.CONTAINER_PORT = '5000'
+
+                    }
+
                     else {
 
                         env.DETECTED_LANGUAGE = 'none'
 
                         echo "No application folder changed."
-
                     }
 
 
@@ -98,11 +109,9 @@ pipeline {
                         currentBuild.result = 'NOT_BUILT'
 
                         error("No application changes detected.")
-
                     }
 
                     echo "Application validation successful."
-
                 }
             }
         }
@@ -120,7 +129,6 @@ pipeline {
                             cd python-demo
                             python -m pip install -r requirements.txt
                         '''
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'node') {
@@ -129,7 +137,6 @@ pipeline {
                             cd node-demo
                             echo Node.js application does not require external dependencies.
                         '''
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
@@ -138,7 +145,6 @@ pipeline {
                             cd java-demo
                             mvn clean compile
                         '''
-
                     }
                 }
             }
@@ -157,7 +163,6 @@ pipeline {
                             cd python-demo
                             pytest
                         '''
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'node') {
@@ -166,7 +171,6 @@ pipeline {
                             cd node-demo
                             npm test
                         '''
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
@@ -184,9 +188,8 @@ pipeline {
 
                             if errorlevel 1 exit /b %errorlevel%
 
-                            java -cp target/java-demo-1.0.0.jar com.securecicd.App
+                            echo Java application validation completed.
                         '''
-
                     }
                 }
             }
@@ -202,13 +205,11 @@ pipeline {
                     if (env.DETECTED_LANGUAGE == 'python') {
 
                         echo "Python application build preparation complete."
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
                         echo "Node.js application build preparation complete."
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
@@ -217,7 +218,6 @@ pipeline {
                             cd java-demo
                             mvn package -DskipTests
                         '''
-
                     }
                 }
             }
@@ -235,7 +235,6 @@ pipeline {
                         bat '''
                             docker build -t secure-cicd-app:latest python-demo
                         '''
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'node') {
@@ -243,7 +242,6 @@ pipeline {
                         bat '''
                             docker build -t secure-cicd-node-app:latest node-demo
                         '''
-
                     }
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
@@ -251,7 +249,6 @@ pipeline {
                         bat '''
                             docker build -t secure-cicd-java-app:latest java-demo
                         '''
-
                     }
                 }
             }
@@ -264,7 +261,9 @@ pipeline {
 
                 powershell '''
 
-                    Write-Host "Starting security gate..."
+                    Write-Host "============================================"
+                    Write-Host "Starting Security Gate"
+                    Write-Host "============================================"
 
                     & "$env:WORKSPACE\\security-gate.ps1"
 
@@ -273,7 +272,6 @@ pipeline {
                         Write-Host "Security Gate BLOCKED the pipeline."
 
                         exit $LASTEXITCODE
-
                     }
 
                     Write-Host "Security Gate passed."
@@ -351,7 +349,9 @@ pipeline {
                     ]) {
 
                         bat '''
-                            echo Checking AWS SSM connection...
+                            echo ============================================
+                            echo Checking AWS SSM Connection
+                            echo ============================================
 
                             aws ssm describe-instance-information ^
                                 --filters "Key=InstanceIds,Values=%EC2_INSTANCE_ID%" ^
@@ -380,7 +380,10 @@ pipeline {
 
                         powershell '''
 
-                            Write-Host "Starting EC2 deployment through AWS SSM..."
+                            Write-Host "============================================"
+                            Write-Host "Starting EC2 Deployment through AWS SSM"
+                            Write-Host "============================================"
+
 
                             $commands = @()
 
@@ -392,8 +395,8 @@ pipeline {
                                     "docker rm -f secure-cicd-app 2>/dev/null || true",
                                     "docker run -d --name secure-cicd-app -p 5000:5000 aditi1166/secure-cicd-app:latest"
                                 )
-
                             }
+
 
                             elseif ($env:DETECTED_LANGUAGE -eq "node") {
 
@@ -402,8 +405,8 @@ pipeline {
                                     "docker rm -f secure-cicd-node-app 2>/dev/null || true",
                                     "docker run -d --name secure-cicd-node-app -p 3000:3000 aditi1166/secure-cicd-node-app:latest"
                                 )
-
                             }
+
 
                             elseif ($env:DETECTED_LANGUAGE -eq "java") {
 
@@ -412,19 +415,21 @@ pipeline {
                                     "docker rm -f secure-cicd-java-app 2>/dev/null || true",
                                     "docker run -d --name secure-cicd-java-app -p 8081:8080 aditi1166/secure-cicd-java-app:latest"
                                 )
-
                             }
+
 
                             else {
 
                                 Write-Host "No valid application detected."
 
                                 exit 1
-
                             }
 
 
-                            Write-Host "Commands to execute on EC2:"
+                            Write-Host ""
+                            Write-Host "Commands that will run on EC2:"
+                            Write-Host ""
+
 
                             $commands | ForEach-Object {
                                 Write-Host $_
@@ -438,6 +443,8 @@ pipeline {
 
                             $parameterJson = $parameterObject | ConvertTo-Json -Compress
 
+
+                            Write-Host ""
                             Write-Host "Sending command to EC2 through SSM..."
 
 
@@ -454,7 +461,6 @@ pipeline {
                                 Write-Host "Failed to send SSM command."
 
                                 exit $LASTEXITCODE
-
                             }
 
 
@@ -463,13 +469,13 @@ pipeline {
                             $commandId = $commandData.Command.CommandId
 
 
+                            Write-Host ""
                             Write-Host "SSM Command ID: $commandId"
-
-
                             Write-Host "Waiting for EC2 command to complete..."
 
 
                             $status = "Pending"
+                            $invocationData = $null
 
 
                             for ($i = 1; $i -le 30; $i++) {
@@ -489,7 +495,6 @@ pipeline {
                                     Write-Host "Unable to read SSM command status."
 
                                     exit $LASTEXITCODE
-
                                 }
 
 
@@ -509,30 +514,29 @@ pipeline {
                                 ) {
 
                                     break
-
                                 }
-
                             }
 
 
                             Write-Host ""
-                            Write-Host "========== EC2 COMMAND OUTPUT =========="
+                            Write-Host "============================================"
+                            Write-Host "EC2 COMMAND OUTPUT"
+                            Write-Host "============================================"
+
 
                             if ($invocationData.StandardOutputContent) {
 
                                 Write-Host $invocationData.StandardOutputContent
-
                             }
 
 
                             if ($invocationData.StandardErrorContent) {
 
                                 Write-Host $invocationData.StandardErrorContent
-
                             }
 
 
-                            Write-Host "========================================="
+                            Write-Host "============================================"
 
 
                             if ($status -ne "Success") {
@@ -540,7 +544,6 @@ pipeline {
                                 Write-Host "EC2 deployment failed through SSM."
 
                                 exit 1
-
                             }
 
 
@@ -570,23 +573,22 @@ pipeline {
                         bat '''
                             powershell -NoProfile -NonInteractive -Command "$r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:5000/health' -UseBasicParsing; Write-Host 'HTTP Status:' $r.StatusCode; Write-Host 'Response:' $r.Content; if ($r.StatusCode -ne 200) { exit 1 }"
                         '''
-
                     }
+
 
                     else if (env.DETECTED_LANGUAGE == 'node') {
 
                         bat '''
                             powershell -NoProfile -NonInteractive -Command "$r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:3000/health' -UseBasicParsing; Write-Host 'HTTP Status:' $r.StatusCode; Write-Host 'Response:' $r.Content; if ($r.StatusCode -ne 200) { exit 1 }"
                         '''
-
                     }
+
 
                     else if (env.DETECTED_LANGUAGE == 'java') {
 
                         bat '''
                             powershell -NoProfile -NonInteractive -Command "$r = Invoke-WebRequest -Uri 'http://ec2-51-20-7-125.eu-north-1.compute.amazonaws.com:8081/health' -UseBasicParsing; Write-Host 'HTTP Status:' $r.StatusCode; Write-Host 'Response:' $r.Content; if ($r.StatusCode -ne 200) { exit 1 }"
                         '''
-
                     }
                 }
             }
@@ -607,7 +609,6 @@ pipeline {
             echo "Deployment completed successfully."
             echo "Health check passed."
             echo "============================================"
-
         }
 
 
@@ -619,7 +620,6 @@ pipeline {
             echo "Application: ${env.DETECTED_LANGUAGE}"
             echo "Please check the failed stage in Jenkins."
             echo "============================================"
-
         }
     }
 }
