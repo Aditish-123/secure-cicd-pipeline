@@ -237,12 +237,6 @@ pipeline {
             }
         }
 
-        /*
-         * Docker Hub Login
-         *
-         * Using the same working login approach that was previously
-         * successful in this project.
-         */
         stage('Docker Hub Login') {
             steps {
                 script {
@@ -303,21 +297,24 @@ pipeline {
                 script {
 
                     withCredentials([
-                        usernamePassword(
-                            credentialsId: 'aws-ssm-credentials',
-                            usernameVariable: 'AWS_ACCESS_KEY_ID',
-                            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                        )
+                        [$class: 'AmazonWebServicesCredentialsBinding',
+                         credentialsId: 'aws-ssm-credentials']
                     ]) {
+
+                        echo "Testing AWS credentials..."
 
                         bat """
                         "${AWS_CLI}" sts get-caller-identity
                         """
 
+                        echo "Testing AWS Systems Manager access..."
+
                         bat """
                         "${AWS_CLI}" ssm describe-instance-information ^
                             --region ${AWS_DEFAULT_REGION}
                         """
+
+                        echo "AWS SSM connection successful."
                     }
                 }
             }
@@ -363,6 +360,12 @@ pipeline {
                         containerPort = '8080'
                     }
 
+                    echo "Preparing EC2 deployment..."
+                    echo "Application: ${env.APP_TYPE}"
+                    echo "Docker image: ${imageName}"
+                    echo "Container: ${containerName}"
+                    echo "Port: ${hostPort}:${containerPort}"
+
                     def commands = """
 docker pull ${imageName}
 docker stop ${containerName} || true
@@ -383,12 +386,11 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
                     )
 
                     withCredentials([
-                        usernamePassword(
-                            credentialsId: 'aws-ssm-credentials',
-                            usernameVariable: 'AWS_ACCESS_KEY_ID',
-                            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                        )
+                        [$class: 'AmazonWebServicesCredentialsBinding',
+                         credentialsId: 'aws-ssm-credentials']
                     ]) {
+
+                        echo "Sending deployment command to EC2 through AWS SSM..."
 
                         bat """
                         "${AWS_CLI}" ssm send-command ^
@@ -397,6 +399,8 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
                             --parameters file://ssm-commands.json ^
                             --region ${AWS_DEFAULT_REGION}
                         """
+
+                        echo "Deployment command sent successfully."
                     }
                 }
             }
