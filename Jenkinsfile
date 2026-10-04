@@ -380,10 +380,18 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
                         .replace('\r\n', '\\n')
                         .replace('\n', '\\n')
 
+                    /*
+                     * IMPORTANT:
+                     * AWS CLI --parameters expects the parameters object directly.
+                     * Do NOT wrap it inside another "Parameters" object.
+                     */
                     writeFile(
                         file: 'ssm-commands.json',
-                        text: '{"Parameters":{"commands":["' + escapedCommands + '"]}}'
+                        text: '{"commands":["' + escapedCommands + '"]}'
                     )
+
+                    echo "Generated SSM command parameters:"
+                    echo '{"commands":[...]}'
 
                     withCredentials([
                         [$class: 'AmazonWebServicesCredentialsBinding',
