@@ -4,7 +4,7 @@ param(
     [string]$Application,
 
     [Parameter(Mandatory = $true)]
-    [string]$Host
+    [string]$EC2Host
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,7 +22,7 @@ elseif ($Application -eq "java") {
     $path = "/health"
 }
 
-$url = "http://$Host`:$port$path"
+$url = "http://$EC2Host`:$port$path"
 
 Write-Host "============================================"
 Write-Host "APPLICATION HEALTH CHECK"
