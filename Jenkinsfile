@@ -261,22 +261,11 @@ pipeline {
                         error "Unsupported application type."
                     }
 
-                    echo "============================================"
-                    echo "DEPLOYMENT CONFIGURATION"
-                    echo "============================================"
-                    echo "Application: ${env.APP_TYPE}"
-                    echo "Image: ${imageName}"
-                    echo "Container: ${containerName}"
-                    echo "Host Port: ${hostPort}"
-                    echo "Container Port: ${containerPort}"
-                    echo "============================================"
-
                     def commands =
                         "echo 'Starting deployment'\n" +
                         "docker pull ${imageName}\n" +
                         "docker rm -f ${containerName} || true\n" +
-                        "OLD_CONTAINER=\\$(docker ps -q --filter publish=${hostPort})\n" +
-                        "if [ -n \"\\$OLD_CONTAINER\" ]; then docker rm -f \\$OLD_CONTAINER; fi\n" +
+                        "docker ps -q --filter publish=${hostPort} | xargs -r docker rm -f\n" +
                         "docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageName}\n" +
                         "docker ps --filter name=${containerName}"
 
@@ -327,12 +316,10 @@ pipeline {
                                 break
                             }
 
-                            if (
-                                status == 'Failed' ||
+                            if (status == 'Failed' ||
                                 status == 'Cancelled' ||
                                 status == 'TimedOut' ||
-                                status == 'Cancelling'
-                            ) {
+                                status == 'Cancelling') {
 
                                 def errorOutput = bat(
                                     script: "\"${AWS_CLI}\" ssm get-command-invocation --command-id ${commandId} --instance-id ${EC2_INSTANCE_ID} --region ${AWS_DEFAULT_REGION} --query \"StandardErrorContent\" --output text",
@@ -349,8 +336,6 @@ pipeline {
                         if (!deploymentSuccess) {
                             error "EC2 deployment timed out."
                         }
-
-                        echo "EC2 deployment completed successfully."
                     }
                 }
             }
