@@ -26,6 +26,7 @@ pipeline {
         stage('Detect Application') {
             steps {
                 script {
+
                     def changedFiles = bat(
                         script: '''
                         @echo off
@@ -38,30 +39,43 @@ pipeline {
                     echo changedFiles
 
                     if (changedFiles.contains('node-demo/')) {
+
                         env.APP_TYPE = 'node'
                         echo "Node.js application detected."
 
                     } else if (changedFiles.contains('java-demo/')) {
+
                         env.APP_TYPE = 'java'
                         echo "Java application detected."
 
                     } else if (changedFiles.contains('python-demo/')) {
+
                         env.APP_TYPE = 'python'
                         echo "Python application detected."
 
                     } else if (changedFiles == 'Jenkinsfile') {
+
                         env.APP_TYPE = 'python'
+
                         echo "Only Jenkinsfile changed."
                         echo "Using Python application for pipeline validation."
 
                     } else {
+
                         if (fileExists('node-demo/package.json')) {
+
                             env.APP_TYPE = 'node'
+
                         } else if (fileExists('python-demo/requirements.txt')) {
+
                             env.APP_TYPE = 'python'
+
                         } else if (fileExists('java-demo/pom.xml')) {
+
                             env.APP_TYPE = 'java'
+
                         } else {
+
                             error "Unable to detect supported application."
                         }
                     }
@@ -71,9 +85,11 @@ pipeline {
             }
         }
 
+
         stage('Validate') {
             steps {
                 script {
+
                     if (env.APP_TYPE == 'python') {
 
                         if (!fileExists('python-demo/requirements.txt')) {
@@ -93,6 +109,7 @@ pipeline {
                         }
 
                     } else {
+
                         error "Unsupported application type."
                     }
 
@@ -100,6 +117,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Install Dependencies') {
             steps {
@@ -130,6 +148,7 @@ pipeline {
             }
         }
 
+
         stage('Test') {
             steps {
                 script {
@@ -159,6 +178,7 @@ pipeline {
             }
         }
 
+
         stage('Build Application') {
             steps {
                 script {
@@ -181,6 +201,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Docker Build') {
             steps {
@@ -211,6 +232,7 @@ pipeline {
             }
         }
 
+
         stage('Security Gate') {
             steps {
                 script {
@@ -236,6 +258,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Docker Hub Login') {
             steps {
@@ -266,6 +289,7 @@ pipeline {
             }
         }
 
+
         stage('Docker Push') {
             steps {
                 script {
@@ -291,6 +315,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('SSM Connection Test') {
             steps {
@@ -320,6 +345,7 @@ pipeline {
             }
         }
 
+
         stage('Deploy to EC2 via SSM') {
             steps {
                 script {
@@ -339,10 +365,12 @@ pipeline {
                         imageName = env.JAVA_IMAGE
                     }
 
+
                     def containerName = "${env.APP_TYPE}-secure-cicd-app"
 
                     def hostPort = ''
                     def containerPort = ''
+
 
                     if (env.APP_TYPE == 'python') {
 
@@ -360,11 +388,16 @@ pipeline {
                         containerPort = '8080'
                     }
 
-                    echo "Preparing EC2 deployment..."
+
+                    echo "============================================"
+                    echo "Preparing EC2 Deployment"
+                    echo "============================================"
                     echo "Application: ${env.APP_TYPE}"
                     echo "Docker image: ${imageName}"
                     echo "Container: ${containerName}"
-                    echo "Port: ${hostPort}:${containerPort}"
+                    echo "Port mapping: ${hostPort}:${containerPort}"
+                    echo "============================================"
+
 
                     def commands = """
 docker pull ${imageName}
@@ -373,6 +406,7 @@ docker rm ${containerName} || true
 docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageName}
 """
 
+
                     def escapedCommands = commands
                         .trim()
                         .replace('\\', '\\\\')
@@ -380,39 +414,181 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
                         .replace('\r\n', '\\n')
                         .replace('\n', '\\n')
 
+
                     /*
-                     * IMPORTANT:
-                     * AWS CLI --parameters expects the parameters object directly.
-                     * Do NOT wrap it inside another "Parameters" object.
+                     * AWS SSM expects:
+                     *
+                     * {
+                     *   "commands": [
+                     *      "command1\\ncommand2"
+                     *   ]
+                     * }
+                     *
+                     * Do NOT add another "Parameters" wrapper.
                      */
+
                     writeFile(
                         file: 'ssm-commands.json',
                         text: '{"commands":["' + escapedCommands + '"]}'
                     )
 
-                    echo "Generated SSM command parameters:"
-                    echo '{"commands":[...]}'
+
+                    echo "SSM command parameters prepared."
+
 
                     withCredentials([
                         [$class: 'AmazonWebServicesCredentialsBinding',
                          credentialsId: 'aws-ssm-credentials']
                     ]) {
 
+
                         echo "Sending deployment command to EC2 through AWS SSM..."
 
-                        bat """
-                        "${AWS_CLI}" ssm send-command ^
-                            --instance-ids ${EC2_INSTANCE_ID} ^
-                            --document-name "AWS-RunShellScript" ^
-                            --parameters file://ssm-commands.json ^
-                            --region ${AWS_DEFAULT_REGION}
-                        """
 
-                        echo "Deployment command sent successfully."
+                        /*
+                         * Send command and capture CommandId.
+                         */
+
+                        def commandId = bat(
+                            script: """
+                            "${AWS_CLI}" ssm send-command ^
+                                --instance-ids ${EC2_INSTANCE_ID} ^
+                                --document-name "AWS-RunShellScript" ^
+                                --parameters file://ssm-commands.json ^
+                                --region ${AWS_DEFAULT_REGION} ^
+                                --query "Command.CommandId" ^
+                                --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+
+                        /*
+                         * Jenkins bat output may contain multiple lines.
+                         * Take the final non-empty line as CommandId.
+                         */
+
+                        def commandLines = commandId
+                            .split('\r?\n')
+                            .findAll { it.trim() }
+
+                        commandId = commandLines[-1].trim()
+
+
+                        if (!commandId || commandId == 'None') {
+
+                            error "AWS SSM did not return a valid CommandId."
+                        }
+
+
+                        env.SSM_COMMAND_ID = commandId
+
+
+                        echo "SSM Command ID: ${commandId}"
+                        echo "Waiting for EC2 deployment to complete..."
+
+
+                        def finalStatus = 'Pending'
+
+
+                        /*
+                         * Poll SSM every 5 seconds.
+                         * Maximum 30 attempts = 150 seconds.
+                         */
+
+                        for (int attempt = 1; attempt <= 30; attempt++) {
+
+                            sleep(
+                                time: 5,
+                                unit: 'SECONDS'
+                            )
+
+
+                            def statusOutput = bat(
+                                script: """
+                                "${AWS_CLI}" ssm get-command-invocation ^
+                                    --command-id ${commandId} ^
+                                    --instance-id ${EC2_INSTANCE_ID} ^
+                                    --region ${AWS_DEFAULT_REGION} ^
+                                    --query "Status" ^
+                                    --output text
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+
+                            def statusLines = statusOutput
+                                .split('\r?\n')
+                                .findAll { it.trim() }
+
+
+                            if (statusLines) {
+                                finalStatus = statusLines[-1].trim()
+                            }
+
+
+                            echo "SSM deployment status: ${finalStatus}"
+
+
+                            if (finalStatus == 'Success') {
+
+                                echo "============================================"
+                                echo "EC2 DEPLOYMENT SUCCESSFUL"
+                                echo "============================================"
+
+                                break
+                            }
+
+
+                            if (
+                                finalStatus == 'Failed' ||
+                                finalStatus == 'Cancelled' ||
+                                finalStatus == 'TimedOut' ||
+                                finalStatus == 'Cancelling'
+                            ) {
+
+
+                                echo "EC2 deployment failed."
+
+
+                                def errorOutput = bat(
+                                    script: """
+                                    "${AWS_CLI}" ssm get-command-invocation ^
+                                        --command-id ${commandId} ^
+                                        --instance-id ${EC2_INSTANCE_ID} ^
+                                        --region ${AWS_DEFAULT_REGION} ^
+                                        --query "StandardErrorContent" ^
+                                        --output text
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+
+
+                                echo "============================================"
+                                echo "EC2 DEPLOYMENT ERROR"
+                                echo "============================================"
+                                echo errorOutput
+                                echo "============================================"
+
+
+                                error(
+                                    "EC2 deployment failed. SSM status: ${finalStatus}"
+                                )
+                            }
+                        }
+
+
+                        if (finalStatus != 'Success') {
+
+                            error(
+                                "EC2 deployment timed out. Final SSM status: ${finalStatus}"
+                            )
+                        }
                     }
                 }
             }
         }
+
 
         stage('Health Check') {
             steps {
@@ -420,47 +596,90 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
 
                     def healthUrl = ''
 
+
                     if (env.APP_TYPE == 'python') {
 
-                        healthUrl = "http://${EC2_HOST}:5000/health"
+                        healthUrl =
+                            "http://${EC2_HOST}:5000/health"
 
                     } else if (env.APP_TYPE == 'node') {
 
-                        healthUrl = "http://${EC2_HOST}:3000/health"
+                        healthUrl =
+                            "http://${EC2_HOST}:3000/health"
 
                     } else if (env.APP_TYPE == 'java') {
 
-                        healthUrl = "http://${EC2_HOST}:8081/health"
+                        healthUrl =
+                            "http://${EC2_HOST}:8081/health"
                     }
 
-                    echo "Checking application health..."
+
+                    echo "============================================"
+                    echo "APPLICATION HEALTH CHECK"
+                    echo "============================================"
                     echo "Health URL: ${healthUrl}"
 
-                    bat """
-                    powershell -Command ^
-                    "\\$response = Invoke-WebRequest -Uri '${healthUrl}' -UseBasicParsing; ^
-                    Write-Host 'HTTP Status:' \\$response.StatusCode; ^
-                    Write-Host 'Response:' \\$response.Content; ^
-                    if (\\$response.StatusCode -ne 200) { exit 1 }"
-                    """
+
+                    /*
+                     * IMPORTANT:
+                     * Use single-quoted Groovy string for the PowerShell
+                     * command so Jenkins does not try to interpret
+                     * PowerShell variables such as $response.
+                     */
+
+                    def healthResult = bat(
+                        script: """
+                        powershell -NoProfile -Command ^
+                        "try { ^
+                            \\\$response = Invoke-WebRequest -Uri '${healthUrl}' -UseBasicParsing -TimeoutSec 15; ^
+                            Write-Host 'HTTP Status:' \\\$response.StatusCode; ^
+                            Write-Host 'Response:' \\\$response.Content; ^
+                            if (\\\$response.StatusCode -ne 200) { exit 1 } ^
+                        } catch { ^
+                            Write-Host 'Health check failed:' \\\$_.Exception.Message; ^
+                            exit 1 ^
+                        }"
+                        """,
+                        returnStatus: true
+                    )
+
+
+                    if (healthResult != 0) {
+
+                        error(
+                            "Application health check failed."
+                        )
+                    }
+
+
+                    echo "============================================"
+                    echo "APPLICATION IS HEALTHY"
+                    echo "HTTP 200 received from application."
+                    echo "============================================"
                 }
             }
         }
     }
 
+
     post {
 
         success {
+
             echo """
 ============================================
 CI/CD PIPELINE SUCCESSFUL
 ============================================
+
 Application: ${env.APP_TYPE}
 
 Pipeline completed:
+
 GitHub
    ↓
 Application Detection
+   ↓
+Validation
    ↓
 Dependencies
    ↓
@@ -479,22 +698,34 @@ AWS SSM
 EC2 Deployment
    ↓
 Health Check
+   ↓
+APPLICATION LIVE
+
 ============================================
 """
+
         }
 
+
         failure {
+
             echo """
 ============================================
 CI/CD PIPELINE FAILED
 ============================================
+
 Application: ${env.APP_TYPE}
-Please check the failed stage in Jenkins.
+
+Failed stage should be visible above
+in the Jenkins console output.
+
 ============================================
 """
         }
 
+
         always {
+
             echo "Pipeline execution completed."
         }
     }
