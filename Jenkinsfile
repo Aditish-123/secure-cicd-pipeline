@@ -271,7 +271,7 @@ pipeline {
 
                     writeFile(
                         file: 'ssm-commands.json',
-                        text: '{"Parameters":{"commands":["' + escapedCommands + '"]}}'
+                        text: '{"commands":["' + escapedCommands + '"]}'
                     )
 
                     withCredentials([
