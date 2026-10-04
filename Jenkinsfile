@@ -26,7 +26,6 @@ pipeline {
         stage('Detect Application') {
             steps {
                 script {
-
                     def changedFiles = bat(
                         script: '''
                         @echo off
@@ -56,7 +55,6 @@ pipeline {
                         echo "Using Python application for pipeline validation."
 
                     } else {
-
                         if (fileExists('node-demo/package.json')) {
                             env.APP_TYPE = 'node'
                         } else if (fileExists('python-demo/requirements.txt')) {
@@ -76,7 +74,6 @@ pipeline {
         stage('Validate') {
             steps {
                 script {
-
                     if (env.APP_TYPE == 'python') {
 
                         if (!fileExists('python-demo/requirements.txt')) {
@@ -240,6 +237,12 @@ pipeline {
             }
         }
 
+        /*
+         * Docker Hub Login
+         *
+         * Using the same working login approach that was previously
+         * successful in this project.
+         */
         stage('Docker Hub Login') {
             steps {
                 script {
@@ -252,22 +255,17 @@ pipeline {
                         )
                     ]) {
 
-                        powershell '''
-                            $username = $env:DOCKER_USERNAME.Trim()
-                            $password = $env:DOCKER_PASSWORD.Trim()
+                        bat '''
+                        echo Logging in to Docker Hub...
 
-                            Write-Host "Logging in to Docker Hub..."
+                        docker login -u "%DOCKER_USERNAME%" -p "%DOCKER_PASSWORD%"
 
-                            $password | docker login `
-                                --username $username `
-                                --password-stdin
+                        if %ERRORLEVEL% NEQ 0 (
+                            echo Docker Hub authentication failed.
+                            exit /b 1
+                        )
 
-                            if ($LASTEXITCODE -ne 0) {
-                                Write-Error "Docker Hub authentication failed."
-                                exit 1
-                            }
-
-                            Write-Host "Docker Hub login successful."
+                        echo Docker Hub login successful.
                         '''
                     }
                 }
@@ -332,12 +330,15 @@ pipeline {
                     def imageName = ''
 
                     if (env.APP_TYPE == 'python') {
+
                         imageName = env.PYTHON_IMAGE
 
                     } else if (env.APP_TYPE == 'node') {
+
                         imageName = env.NODE_IMAGE
 
                     } else if (env.APP_TYPE == 'java') {
+
                         imageName = env.JAVA_IMAGE
                     }
 
@@ -425,10 +426,10 @@ docker run -d --name ${containerName} -p ${hostPort}:${containerPort} ${imageNam
 
                     bat """
                     powershell -Command ^
-                    "\$response = Invoke-WebRequest -Uri '${healthUrl}' -UseBasicParsing; ^
-                    Write-Host 'HTTP Status:' \$response.StatusCode; ^
-                    Write-Host 'Response:' \$response.Content; ^
-                    if (\$response.StatusCode -ne 200) { exit 1 }"
+                    "\\$response = Invoke-WebRequest -Uri '${healthUrl}' -UseBasicParsing; ^
+                    Write-Host 'HTTP Status:' \\$response.StatusCode; ^
+                    Write-Host 'Response:' \\$response.Content; ^
+                    if (\\$response.StatusCode -ne 200) { exit 1 }"
                     """
                 }
             }
