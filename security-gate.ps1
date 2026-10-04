@@ -2,41 +2,57 @@
 # SECURITY GATE
 # ============================================
 
+$ErrorActionPreference = "Stop"
+
 $trivy = "C:\trivy\trivy.exe"
 
+# ============================================
+# INPUTS FROM JENKINS
+# ============================================
+
+$image = $args[0]
+$detectedLanguage = $args[1]
+
+if ([string]::IsNullOrWhiteSpace($image)) {
+    Write-Host "ERROR: Docker image was not provided."
+    exit 1
+}
+
+if ([string]::IsNullOrWhiteSpace($detectedLanguage)) {
+    Write-Host "ERROR: Application type was not provided."
+    exit 1
+}
+
+Write-Host ""
+Write-Host "============================================"
+Write-Host "SECURITY GATE"
+Write-Host "============================================"
+
+Write-Host "Detected application: $detectedLanguage"
+Write-Host "Docker image: $image"
 
 # ============================================
-# SELECT DOCKER IMAGE
+# FILES
 # ============================================
-
-if ($env:DETECTED_LANGUAGE -eq "node") {
-
-    $image = "secure-cicd-node-app:latest"
-
-}
-elseif ($env:DETECTED_LANGUAGE -eq "java") {
-
-    $image = "secure-cicd-java-app:latest"
-
-}
-elseif ($env:DETECTED_LANGUAGE -eq "python") {
-
-    $image = "secure-cicd-app:latest"
-
-}
-else {
-
-    Write-Host "No application selected for security scanning."
-    Write-Host "Security Gate will be skipped."
-
-    exit 0
-}
-
 
 $report = "trivy-report.json"
 $summary = "trivy-summary.txt"
-$previous = "previous-security.txt"
 
+# Application-specific baseline
+$previous = "previous-security-$detectedLanguage.txt"
+
+# ============================================
+# CHECK TRIVY
+# ============================================
+
+if (-not (Test-Path $trivy)) {
+
+    Write-Host ""
+    Write-Host "ERROR: Trivy was not found."
+    Write-Host "Expected location: $trivy"
+
+    exit 1
+}
 
 # ============================================
 # START TRIVY SCAN
@@ -47,16 +63,14 @@ Write-Host "============================================"
 Write-Host "STARTING SECURITY SCAN"
 Write-Host "============================================"
 
-Write-Host "Detected application: $env:DETECTED_LANGUAGE"
-Write-Host "Scanning Docker image: $image"
-
+Write-Host "Application : $detectedLanguage"
+Write-Host "Image       : $image"
 
 & $trivy image `
     --scanners vuln `
     --format json `
     --output $report `
     $image
-
 
 if ($LASTEXITCODE -ne 0) {
 
@@ -65,19 +79,22 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-
 # ============================================
 # READ TRIVY REPORT
 # ============================================
 
-$data = Get-Content $report | ConvertFrom-Json
+if (-not (Test-Path $report)) {
 
+    Write-Host "ERROR: Trivy report was not created."
+    exit 1
+}
+
+$data = Get-Content $report -Raw | ConvertFrom-Json
 
 $critical = 0
 $high = 0
 $medium = 0
 $low = 0
-
 
 foreach ($result in $data.Results) {
 
@@ -107,7 +124,6 @@ foreach ($result in $data.Results) {
     }
 }
 
-
 # ============================================
 # SECURITY SUMMARY
 # ============================================
@@ -117,16 +133,16 @@ Write-Host "============================================"
 Write-Host "SECURITY SUMMARY"
 Write-Host "============================================"
 
-Write-Host "Application : $env:DETECTED_LANGUAGE"
+Write-Host "Application : $detectedLanguage"
 Write-Host "Docker Image: $image"
 Write-Host ""
+
 Write-Host "CRITICAL: $critical"
 Write-Host "HIGH:     $high"
 Write-Host "MEDIUM:   $medium"
 Write-Host "LOW:      $low"
 
 Write-Host "============================================"
-
 
 # ============================================
 # SECURITY COMPARISON
@@ -137,8 +153,9 @@ Write-Host "============================================"
 Write-Host "SECURITY COMPARISON"
 Write-Host "============================================"
 
+$hasPrevious = Test-Path $previous
 
-if (Test-Path $previous) {
+if ($hasPrevious) {
 
     $previousData = @{}
 
@@ -150,12 +167,29 @@ if (Test-Path $previous) {
         }
     }
 
+    $previousCritical = if ($previousData.ContainsKey("CRITICAL")) {
+        $previousData["CRITICAL"]
+    } else {
+        0
+    }
 
-    $previousCritical = $previousData["CRITICAL"]
-    $previousHigh = $previousData["HIGH"]
-    $previousMedium = $previousData["MEDIUM"]
-    $previousLow = $previousData["LOW"]
+    $previousHigh = if ($previousData.ContainsKey("HIGH")) {
+        $previousData["HIGH"]
+    } else {
+        0
+    }
 
+    $previousMedium = if ($previousData.ContainsKey("MEDIUM")) {
+        $previousData["MEDIUM"]
+    } else {
+        0
+    }
+
+    $previousLow = if ($previousData.ContainsKey("LOW")) {
+        $previousData["LOW"]
+    } else {
+        0
+    }
 
     Write-Host ""
     Write-Host "                PREVIOUS     CURRENT"
@@ -165,7 +199,6 @@ if (Test-Path $previous) {
     Write-Host "MEDIUM          $previousMedium          $medium"
     Write-Host "LOW             $previousLow          $low"
 
-
     # ========================================
     # CALCULATE CHANGES
     # ========================================
@@ -174,7 +207,6 @@ if (Test-Path $previous) {
     $highChange = $high - $previousHigh
     $mediumChange = $medium - $previousMedium
     $lowChange = $low - $previousLow
-
 
     Write-Host ""
     Write-Host "============================================"
@@ -186,45 +218,23 @@ if (Test-Path $previous) {
     Write-Host "MEDIUM change:   $mediumChange"
     Write-Host "LOW change:      $lowChange"
 
-
-    # ========================================
-    # CRITICAL CHANGE MESSAGE
-    # ========================================
-
-    Write-Host ""
-
     if ($criticalChange -lt 0) {
-
         Write-Host "CRITICAL vulnerabilities decreased."
-
     }
     elseif ($criticalChange -gt 0) {
-
         Write-Host "WARNING: CRITICAL vulnerabilities increased."
-
     }
     else {
-
         Write-Host "CRITICAL vulnerabilities unchanged."
     }
 
-
-    # ========================================
-    # HIGH CHANGE MESSAGE
-    # ========================================
-
     if ($highChange -lt 0) {
-
         Write-Host "HIGH vulnerabilities decreased."
-
     }
     elseif ($highChange -gt 0) {
-
         Write-Host "WARNING: HIGH vulnerabilities increased."
-
     }
     else {
-
         Write-Host "HIGH vulnerabilities unchanged."
     }
 
@@ -234,19 +244,27 @@ else {
     Write-Host ""
     Write-Host "No previous security scan available."
     Write-Host "This build will be used as the baseline."
-}
 
+    $previousCritical = 0
+    $previousHigh = 0
+    $previousMedium = 0
+    $previousLow = 0
+
+    $criticalChange = 0
+    $highChange = 0
+    $mediumChange = 0
+    $lowChange = 0
+}
 
 Write-Host "============================================"
 
-
 # ============================================
-# CREATE SECURITY SUMMARY FILE
+# CREATE SECURITY SUMMARY
 # ============================================
 
 "===== SECURITY SUMMARY =====" | Out-File $summary
 
-"Application: $env:DETECTED_LANGUAGE" |
+"Application: $detectedLanguage" |
     Out-File $summary -Append
 
 "Docker Image: $image" |
@@ -266,7 +284,6 @@ Write-Host "============================================"
 "LOW: $low" |
     Out-File $summary -Append
 
-
 # ============================================
 # SECURITY COMPARISON IN REPORT
 # ============================================
@@ -276,8 +293,7 @@ Write-Host "============================================"
 "===== SECURITY COMPARISON =====" |
     Out-File $summary -Append
 
-
-if (Test-Path $previous) {
+if ($hasPrevious) {
 
     "Previous CRITICAL: $previousCritical" |
         Out-File $summary -Append
@@ -311,10 +327,16 @@ if (Test-Path $previous) {
 
     "" | Out-File $summary -Append
 
+    "CRITICAL change: $criticalChange" |
+        Out-File $summary -Append
+
     "HIGH change: $highChange" |
         Out-File $summary -Append
 
-    "CRITICAL change: $criticalChange" |
+    "MEDIUM change: $mediumChange" |
+        Out-File $summary -Append
+
+    "LOW change: $lowChange" |
         Out-File $summary -Append
 
 }
@@ -327,7 +349,6 @@ else {
         Out-File $summary -Append
 }
 
-
 # ============================================
 # HIGH / CRITICAL DETAILS
 # ============================================
@@ -338,7 +359,6 @@ else {
     Out-File $summary -Append
 
 "" | Out-File $summary -Append
-
 
 foreach ($result in $data.Results) {
 
@@ -373,10 +393,8 @@ foreach ($result in $data.Results) {
     }
 }
 
-
 Write-Host ""
 Write-Host "Developer-friendly security report created: $summary"
-
 
 # ============================================
 # SAVE CURRENT SCAN AS BASELINE
@@ -389,7 +407,6 @@ MEDIUM=$medium
 LOW=$low
 "@ | Out-File $previous
 
-
 # ============================================
 # SECURITY POLICY
 # ============================================
@@ -398,7 +415,6 @@ Write-Host ""
 Write-Host "============================================"
 Write-Host "SECURITY GATE DECISION"
 Write-Host "============================================"
-
 
 # ============================================
 # RULE 1: CRITICAL
@@ -414,7 +430,6 @@ if ($critical -gt 0) {
     exit 1
 }
 
-
 # ============================================
 # RULE 2: HIGH > 50
 # ============================================
@@ -429,7 +444,6 @@ if ($high -gt 50) {
     exit 1
 }
 
-
 # ============================================
 # RULE 3: HIGH 1-50
 # ============================================
@@ -442,7 +456,6 @@ if ($high -gt 0) {
     Write-Host "High vulnerability count is within allowed threshold of 50."
 }
 
-
 # ============================================
 # RULE 4: NO HIGH / CRITICAL
 # ============================================
@@ -452,7 +465,6 @@ if ($high -eq 0 -and $critical -eq 0) {
     Write-Host ""
     Write-Host "No HIGH or CRITICAL vulnerabilities found."
 }
-
 
 # ============================================
 # FINAL DECISION
